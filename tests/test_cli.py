@@ -1,0 +1,134 @@
+import json
+
+from optics_prescription_matcher.__main__ import main
+
+
+def write_inputs(tmp_path):
+    source = tmp_path / "input.json"
+    source.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "title": "CLI",
+                "units": "mm",
+                "surfaces": [
+                    {
+                        "id": "1",
+                        "radius": "10",
+                        "thickness": "2",
+                        "nd": "1.5",
+                        "vd": "50",
+                    },
+                    {"id": "2", "radius": "0", "thickness": "0"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    catalog = tmp_path / "catalog.csv"
+    catalog.write_text(
+        'Manufacturer,Typecode,nd,vd,"P_g,F","d_Pg,F"\nOhara,S-BSL7,1.5,50,,\n',
+        encoding="utf-8",
+    )
+    return source, catalog
+
+
+def test_cli_writes_csv_and_deterministic_report(tmp_path, capsys):
+    source, catalog = write_inputs(tmp_path)
+    prefix = tmp_path / "study"
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 0
+    report = json.loads((tmp_path / "study.report.json").read_text(encoding="utf-8"))
+    assert report["summary"] == {
+        "air": 1,
+        "supplied": 0,
+        "close": 1,
+        "offset": 0,
+        "unmatched": 0,
+    }
+    assert "S-BSL7" in (tmp_path / "study.csv").read_text(encoding="utf-8")
+    assert "matched=1, unmatched=0" in capsys.readouterr().out
+
+
+def test_cli_refuses_existing_target_without_overwrite(tmp_path, capsys):
+    source, catalog = write_inputs(tmp_path)
+    prefix = tmp_path / "study"
+    (tmp_path / "study.csv").write_text("mine", encoding="utf-8")
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 2
+    assert (tmp_path / "study.csv").read_text(encoding="utf-8") == "mine"
+    assert not (tmp_path / "study.report.json").exists()
+    assert "--overwrite" in capsys.readouterr().err
+
+
+def test_cli_refuses_source_collision_even_with_overwrite(tmp_path):
+    source, catalog = write_inputs(tmp_path)
+    # with_suffix makes input.json the report source only for this deliberately chosen prefix
+    prefix = tmp_path / "catalog"
+    catalog_report = tmp_path / "catalog.report.json"
+    catalog_report.write_text("metadata", encoding="utf-8")
+    assert (
+        main(
+            [
+                str(catalog_report),
+                "--catalog",
+                str(catalog),
+                "--output",
+                str(prefix),
+                "--overwrite",
+            ]
+        )
+        == 2
+    )
+
+
+def test_cli_appends_suffixes_to_dotted_prefix_and_rejects_json_metadata(tmp_path):
+    source, catalog = write_inputs(tmp_path)
+    prefix = tmp_path / "study.v1"
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 0
+    assert (tmp_path / "study.v1.csv").exists()
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text("{}", encoding="utf-8")
+    assert (
+        main(
+            [
+                str(source),
+                "--catalog",
+                str(catalog),
+                "--output",
+                str(tmp_path / "other"),
+                "--metadata",
+                str(metadata),
+            ]
+        )
+        == 2
+    )
+    assert not (tmp_path / "other.csv").exists()
+
+
+def test_cli_invalid_input_creates_no_outputs(tmp_path):
+    source, catalog = write_inputs(tmp_path)
+    source.write_text("{broken", encoding="utf-8")
+    prefix = tmp_path / "bad"
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 2
+    assert not (tmp_path / "bad.csv").exists()
+    assert not (tmp_path / "bad.report.json").exists()
+
+
+def test_cli_no_overwrite_publish_race_cleans_new_outputs(tmp_path, monkeypatch):
+    from optics_prescription_matcher import __main__ as cli
+
+    source, catalog = write_inputs(tmp_path)
+    prefix = tmp_path / "race"
+    real_link = cli.os.link
+    calls = 0
+
+    def raced_link(source_path, target_path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            target_path.write_text("racer", encoding="utf-8")
+        real_link(source_path, target_path)
+
+    monkeypatch.setattr(cli.os, "link", raced_link)
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 2
+    assert not (tmp_path / "race.csv").exists()
+    assert (tmp_path / "race.report.json").read_text(encoding="utf-8") == "racer"

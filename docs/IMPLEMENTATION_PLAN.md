@@ -1,6 +1,6 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
-Status: implementation authorized, 2026-09-10. C1 complete; C2 next.
+Status: implementation authorized, 2026-09-10. C1/C2 complete; C3 next.
 This plan applies the plan-work structure with three small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
@@ -211,6 +211,11 @@ block input validation or pure matching tests.
 
 Execution boundary: direct work on `main`, base `ed91cf6`, serial checkpoints
 with GPT-5.6 builders and fresh read-only reviewers under execute-task. No push.
+On 2026-09-10 the agent service reached its thread limit after initial C2 review.
+The user explicitly authorized reusing existing independent agents: the read-only
+design agent verifies the C2 correction; the C1 builder owns C3 implementation;
+the C2 builder reviews C3 without participating in its implementation. All
+review/verification gates remain; only the fresh-thread requirement is relaxed.
 C1 owns models.py, inputs.py, export.py (CSV only), tests/test_inputs.py,
 tests/test_csv.py, and README input examples. C2 owns matching.py, __main__.py,
 matching/CLI tests and matching documentation; changes to C1 interfaces require
@@ -223,7 +228,7 @@ acceptance gate. No OCR/XLSX/AGF/database work enters these populations.
 | ID | Accepted outcome | Depends on | Primary verification | Status |
 |---|---|---|---|---|
 | C1 | Validated prescription/catalogue records and faithful CSV round trip | Baseline | Sample sections, numeric grammar and diagnostics | complete |
-| C2 | Deterministic preference-aware glass choices and report | C1 | Gates, profiles, offsets and unresolved outcomes | pending |
+| C2 | Deterministic preference-aware glass choices and report | C1 | Gates, profiles, offsets and unresolved outcomes | complete |
 | C3 | Usable ZMX export, configurations and eligible solves | C2 | Sag/equation checks and OpticStudio load/trace | pending |
 
 ## Detailed checkpoints
@@ -268,6 +273,10 @@ Finite population: `matching.py`, `__main__.py`, `tests/test_matching.py`,
 `tests/test_cli.py`, CSV rendering integration in `export.py`, and matching
 usage/status in README and FEATURES. Preserve C1 source strings and public
 loaders; use immutable replacement for matched output, never mutate input.
+Adversarial seam correction: paired source offsets require a supplied base
+typecode. Without one their meaning is undefined; reject at `inputs.py` and
+the public matching boundary rather than erase them on a close choice or call
+them air. This finite input-validation correction includes its C1/C2 regressions.
 Expose the prescribed default/Canon/Nikon profiles explicitly. Render CSV and
 report before writing; protect input/catalogue/metadata paths even with
 `--overwrite`. C2's CLI produces CSV/report only; C3 adds an explicit format
@@ -305,6 +314,28 @@ checks pass; commit `feat(matching): select study glasses using preference profi
 **Scope and approach.** Emit only documented/observed supported records; add
 configuration resolution and TCOM/TOLE inference with rounding evidence. Keep
 unknown ZMX tokens out of the input contract; no general-purpose ZMX parser.
+Finite population: `export.py`, a separate `solves.py` if needed to keep the
+geometry serializer readable, `__main__.py`, exporter/solve/CLI tests, and
+README/FEATURES/ZMX_SYNTAX. Input-contract corrections required by these direct
+consumers remain guarded by the full C1 suite. The parent retains shared plan
+ownership and runs actual OpticStudio checks on final generated artifacts.
+
+Use explicit first OBJ and last IMG surfaces; fail on absent/misplaced endpoints
+instead of inventing geometry or shifting references. Source IDs map by sequence,
+not numeric spelling. Support the C1 system choices (f_number aperture, angular
+or real-image-height y fields) with explicit wavelengths in micrometres. No new
+aperture/field families are necessary for this checkpoint. Base object infinity
+uses DISZ INFINITY, configured infinity uses the host-tested THIC value `1e10`
+with a visible representation note. No unit conversion or focus extrapolation.
+
+For inference, exact constant sums need no precision assumption when no source
+thickness changes. Approximate sums require the recorded interval evidence.
+Collapse TCOM/TOLE candidates that imply the identical dependency because all
+intermediate terms are invariant, preferring TCOM; they are not two independent
+physical explanations. Other competing or overlapping inferred dependencies
+remain unresolved. Explicit constraints take precedence and are checked against
+every configuration before emission. Report rejected/conflicting candidates and
+all nonzero dependent adjustments, without altering the transcription.
 
 **Acceptance criteria.** Every requested configuration resolves; even/odd sag
 matches its input expression; offsets affect the intended quantity; source and
@@ -347,13 +378,20 @@ Python tests pass. Checkpoint tests alone do not replace this end-to-end sweep.
 
 ## Resumption block
 
-- Current checkpoint: C1 complete; C2 next, C3 pending.
+- Current checkpoint: C1 committed as `47d79bd`; C2 complete, C3 next.
 - C1 evidence: 40 tests pass, Ruff lint/format and diff checks pass. Fresh
   independent GPT-5.6 review approved corrected reference resolution, CSV column
   validation, malformed-type diagnostics, and normalization/stop round trips.
   Original sample files are unchanged. Canonical JSON retains system/solve
   metadata that sectioned CSV alone cannot encode.
-- Next action: implement C2 matching/report/CLI against the validated C1 API.
+- C2 evidence: 71 tests pass, Ruff lint/format, pip check and diff checks pass.
+  Independent review found the unnamed-offset semantic defect; the correction
+  was independently approved after the user-authorized reviewer reuse. CLI
+  smoke on the synthetic host study with the supplied catalogue matched both
+  materials with zero unresolved outcomes. Default/Canon/Nikon tests encode the
+  user's labelled preferences; historical sample offsets are not ranking goldens.
+- Next action: implement C3 export/solves, then run actual generated files through
+  OpticStudio. Prototype host checks are recorded separately in ZMX_SYNTAX.
 - Commands: `.\.venv\Scripts\python.exe -m pytest`,
   `.\.venv\Scripts\python.exe -m ruff check .`,
   `.\.venv\Scripts\python.exe -m ruff format --check .`,

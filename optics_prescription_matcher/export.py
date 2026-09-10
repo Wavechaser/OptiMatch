@@ -1,6 +1,7 @@
 """CSV serialization for validated prescriptions."""
 
 import csv
+import io
 from pathlib import Path
 from typing import TextIO
 
@@ -100,3 +101,10 @@ def write_prescription_csv(prescription: Prescription, path: str | Path) -> None
     """Write the supported sectioned CSV without changing source numeric strings."""
     with Path(path).open("w", encoding="utf-8", newline="") as stream:
         _write_csv(prescription, stream)
+
+
+def render_prescription_csv(prescription: Prescription) -> str:
+    """Render CSV in memory so callers can validate all outputs before writing."""
+    stream = io.StringIO(newline="")
+    _write_csv(prescription, stream)
+    return stream.getvalue()

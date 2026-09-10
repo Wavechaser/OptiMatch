@@ -140,6 +140,8 @@ def _surface(data: Any, index: int, symbols: set[str]) -> Surface:
         raise _error(context, "nd and vd must be supplied together")
     if (nd_offset is None) != (vd_offset is None):
         raise _error(context, "nd_offset and vd_offset must be supplied together")
+    if nd_offset is not None and material is None:
+        raise _error(context, "offsets require a supplied material typecode")
     if material is None and nd is None and (pgf is not None or dpgf is not None):
         raise _error(context, "partial dispersion requires nd and vd")
     if nd is not None:

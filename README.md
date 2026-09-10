@@ -4,12 +4,36 @@ Python tools for producing credible optical study prescriptions from patent
 data, using best-effort manufacturer preferences for glass selection. Results
 are study substitutes, not representations of production samples.
 
-The repository contains validated JSON/CSV input records and sectioned CSV
-output. Matching, OCR, and ZMX export are not implemented yet. The intended workflow is
-supplied transcription or OCR, structured prescription, glass matching, then
-CSV and ZMX export. Catalogue input is CSV exported from the user's maintained
-Excel workbook. XLSX parsing, AGF parsing, and SQLite/database storage are out
-of scope. OCR can be added independently later.
+The repository contains validated JSON/CSV input records, deterministic glass
+matching, a machine-readable decision report, and sectioned CSV output. OCR and
+ZMX export are not implemented yet. Catalogue input is CSV exported from the
+user's maintained Excel workbook. XLSX parsing, AGF parsing, and SQLite/database
+storage are out of scope. OCR can be added independently later.
+
+## Match a prescription
+
+Run the C2 workflow with a canonical JSON or sectioned CSV input:
+
+```powershell
+.\.venv\Scripts\python.exe -m optics_prescription_matcher prescription.json `
+  --catalog samples/combined_glass_catalog.csv --profile default `
+  --output output/study
+```
+
+Profiles are `default` (Ohara, Hoya, Hikari), `canon` (Ohara, Hoya; Hikari
+excluded for inferred matches), and `nikon` (Hikari, Ohara, Hoya). The command
+writes `output/study.csv` and `output/study.report.json`. Existing outputs require
+`--overwrite`; outputs can never overwrite the input, catalogue, or CSV metadata
+overlay. Pass `--metadata PATH` only with a sectioned CSV input.
+
+The JSON report distinguishes air, supplied typecodes, close matches, offset
+matches, and unmatched properties. It includes signed prescription-minus-
+catalogue differences, source precision steps, partial-dispersion residuals,
+alternatives, ambiguities, and the ranking criterion that selected a candidate.
+An unknown supplied typecode is preserved and marked host-lookup-unverified.
+Reported decimal steps describe source formatting, not independently established
+measurement accuracy; Excel padding can make them misleading. Supplied offsets
+require a named base glass and are preserved, never reinterpreted as air.
 
 ## Prescription inputs
 
@@ -96,7 +120,7 @@ There are no runtime dependencies yet; development tools are declared in
 
 - `optics_prescription_matcher/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
-- `tests/`: input validation, CSV round-trip, and installation tests.
+- `tests/`: input validation, CSV round-trip, matching, CLI, and installation tests.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
 - `samples/sample_lens_data.csv`: worked, multi-section prescription CSV.
 - `samples/EF-M 22mm F2 STM.ZMX` and `samples/14-24mm F2.8 DG DN Art.ZMX`: original
