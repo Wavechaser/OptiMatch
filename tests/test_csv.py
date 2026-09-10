@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from optics_prescription_matcher.export import write_prescription_csv
-from optics_prescription_matcher.inputs import InputError, load_sectioned_csv
+from optimatch.export import write_prescription_csv
+from optimatch.inputs import InputError, load_sectioned_csv
 
 ROOT = Path(__file__).parents[1]
 

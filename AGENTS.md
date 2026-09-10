@@ -11,7 +11,8 @@ SQLite/database storage are out of scope.
 
 ## Structure
 
-- `optics_prescription_matcher/`: importable Python code; snake_case modules.
+- `optimatch/`: importable Python code and `python -m optimatch` CLI;
+  snake_case modules. The project/distribution remains `optics-prescription-matcher`.
 - `optics_prescription_matcher.egg-info/`: generated editable-install metadata
   at the project root, ignored by Git.
 - `tests/`: pytest tests named `test_*.py`, organized by behavior as code grows.

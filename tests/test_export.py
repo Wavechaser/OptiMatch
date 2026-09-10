@@ -3,14 +3,14 @@ from decimal import Decimal
 
 import pytest
 
-from optics_prescription_matcher.export import _asphere_lines, render_zmx
-from optics_prescription_matcher.inputs import prescription_from_dict
-from optics_prescription_matcher.matching import (
+from optimatch.export import _asphere_lines, render_zmx
+from optimatch.inputs import prescription_from_dict
+from optimatch.matching import (
     Match,
     MatchingResult,
     match_prescription,
 )
-from optics_prescription_matcher.models import (
+from optimatch.models import (
     Asphere,
     CatalogGlass,
     Configuration,

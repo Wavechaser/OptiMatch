@@ -25,7 +25,8 @@ from .matching import PROFILES, match_prescription
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Match an optical prescription to a glass catalogue."
+        prog="python -m optimatch",
+        description="Match an optical prescription to a glass catalogue.",
     )
     parser.add_argument("input", type=Path)
     parser.add_argument("--catalog", required=True, type=Path)

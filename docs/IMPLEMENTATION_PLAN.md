@@ -227,7 +227,7 @@ reader or an attempt to reproduce a manufacturer's production lens.
 Proposed command shape:
 
 ```powershell
-.\.venv\Scripts\python.exe -m optics_prescription_matcher prescription.json --catalog samples/combined_glass_catalog.csv --profile default --output output/study
+.\.venv\Scripts\python.exe -m optimatch prescription.json --catalog samples/combined_glass_catalog.csv --profile default --output output/study
 ```
 
 Produce `study.csv`, `study.zmx` when eligible, and `study.report.json`. A CSV-only

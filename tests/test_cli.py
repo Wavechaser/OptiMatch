@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from optics_prescription_matcher.__main__ import main
+from optimatch.__main__ import main
 
 
 def test_cli_profile_choices_include_all_profiles_and_reject_unknown():
-    from optics_prescription_matcher.__main__ import _parser
+    from optimatch.__main__ import _parser
 
     help_text = _parser().format_help()
     assert "{default,canon,nikon,sony,sigma,fujifilm}" in help_text
@@ -212,7 +212,7 @@ def test_cli_invalid_input_creates_no_outputs(tmp_path):
 
 
 def test_cli_no_overwrite_publish_race_cleans_new_outputs(tmp_path, monkeypatch):
-    from optics_prescription_matcher import __main__ as cli
+    from optimatch import __main__ as cli
 
     source, catalog = write_inputs(tmp_path)
     prefix = tmp_path / "race"

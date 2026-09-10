@@ -1,12 +1,12 @@
 import pytest
 
-from optics_prescription_matcher.models import (
+from optimatch.models import (
     Configuration,
     Prescription,
     Solve,
     Surface,
 )
-from optics_prescription_matcher.solves import resolve_solves
+from optimatch.solves import resolve_solves
 
 
 def prescription(configurations, **changes):

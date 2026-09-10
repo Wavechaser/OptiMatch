@@ -21,7 +21,7 @@ Skip venv creation if it already exists. Activation is unnecessary.
 Match the supplied transcription to CSV:
 
 ```powershell
-.\.venv\Scripts\python.exe -m optics_prescription_matcher samples/sample_lens_data.csv `
+.\.venv\Scripts\python.exe -m optimatch samples/sample_lens_data.csv `
   --catalog samples/combined_glass_catalog.csv --format csv --output output/study
 ```
 

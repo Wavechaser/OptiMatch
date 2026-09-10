@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from optics_prescription_matcher.inputs import (
+from optimatch.inputs import (
     InputError,
     decimal_value,
     load_catalog_csv,

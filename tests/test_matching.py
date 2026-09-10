@@ -3,18 +3,18 @@ from decimal import Decimal
 
 import pytest
 
-from optics_prescription_matcher.inputs import (
+from optimatch.inputs import (
     InputError,
     load_catalog_csv,
     load_sectioned_csv,
     prescription_from_dict,
 )
-from optics_prescription_matcher.matching import (
+from optimatch.matching import (
     PROFILES,
     match_prescription,
     pgf_to_dpgf,
 )
-from optics_prescription_matcher.models import (
+from optimatch.models import (
     Asphere,
     CatalogGlass,
     Prescription,

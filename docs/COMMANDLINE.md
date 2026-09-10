@@ -43,7 +43,7 @@ The CLI accepts `default`, `canon`, `nikon`, `sony`, `sigma`, and
 Complete invocation (there are no subcommands):
 
 ```text
-python -m optics_prescription_matcher INPUT --catalog CSV --output PREFIX
+python -m optimatch INPUT --catalog CSV --output PREFIX
     [--profile {default,canon,nikon,sony,sigma,fujifilm}]
     [--format {csv,zmx,both}]
     [--metadata JSON] [--overwrite]
@@ -72,7 +72,7 @@ validation. There is no automatic retry, interactive prompt or host launch.
 Run the study-model workflow with a canonical JSON or sectioned CSV input:
 
 ```powershell
-.\.venv\Scripts\python.exe -m optics_prescription_matcher prescription.json `
+.\.venv\Scripts\python.exe -m optimatch prescription.json `
   --catalog samples/combined_glass_catalog.csv --profile default `
   --output output/study --format both
 ```
@@ -191,7 +191,7 @@ Ohara,S-BSL7,1.51633,64.1428,1.51825,63.9307,0.535322,-0.0024,
 Example using the supplied transcription without requiring complete ZMX setup:
 
 ```powershell
-.\.venv\Scripts\python.exe -m optics_prescription_matcher samples/sample_lens_data.csv `
+.\.venv\Scripts\python.exe -m optimatch samples/sample_lens_data.csv `
   --catalog samples/combined_glass_catalog.csv --format csv --output output/matched
 ```
 
@@ -199,7 +199,7 @@ For ZMX from a CSV transcription, supply absent stop/system information through
 an overlay and choose a field preset:
 
 ```powershell
-.\.venv\Scripts\python.exe -m optics_prescription_matcher prescription.csv `
+.\.venv\Scripts\python.exe -m optimatch prescription.csv `
   --catalog "my catalogue.csv" --metadata setup.json --field-preset aps-c `
   --profile canon --output output/study
 ```
@@ -207,7 +207,7 @@ an overlay and choose a field preset:
 Load canonical JSON or adapt the historical sectioned CSV:
 
 ```python
-from optics_prescription_matcher.inputs import (
+from optimatch.inputs import (
     load_catalog_csv,
     load_prescription_json,
     load_sectioned_csv,
@@ -275,6 +275,10 @@ undeclared symbols, and misplaced nonfinite values are rejected with location.
 
 ## Development (Windows / PowerShell)
 
+The import package and module CLI are now `optimatch`; the project/distribution
+name remains `optics-prescription-matcher`. Existing checkouts should rerun the
+editable install below after updating. The former package name is not an alias.
+
 Python 3.13 or newer is required. From the repository root:
 
 ```powershell
@@ -300,7 +304,7 @@ There are no runtime dependencies; development tools are declared in
 
 ## Layout and reference data
 
-- `optics_prescription_matcher/`: Python package (flat layout).
+- `optimatch/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
 - `catalogs/REFERENCE_CATALOG.csv`: maintained, executable reference-catalogue
