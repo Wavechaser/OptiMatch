@@ -16,6 +16,81 @@ Accept future OCR results through the same structured input contract.
 
 ## Current delivery register
 
+### Export refinements F1–F4 (2026-09-11)
+
+Execution baseline: `d328957`, clean worktree; 162 tests pass. Work directly in
+the current checkout, with serialized product ownership and fresh read-only
+review before each task-authorized commit. Samples and catalogue are protected.
+
+| ID | Accepted outcome | Dependency | Gate | Status |
+| --- | --- | --- | --- | --- |
+| F1 | Typed fisheye preset, CLI and metadata | — | Units, precedence, header and CLI tests | Complete |
+| F2 | Compact ordered multi-configuration operands | — | Operand sequence tests and host inspection | Pending |
+| F3 | Independent solves survive redundant constant spans | — | Two-pair regression and genuine ambiguity tests | Pending |
+| F4 | Export-only rear dummy separates movement and back focus | F3 | Coordinates, equations, mapping and host evidence | Pending |
+
+F1 adds angle fields 0, 18, 36, 54, 72, 89 degrees without length scaling.
+Explicit compatible fields retain precedence; explicit incompatible field types
+fail. Existing sensor presets remain real-image-height presets.
+
+F2 emits LTTL, varying object THIC, varying independent lens THIC, existing APER,
+then field-by-field FVCY/FVDY pairs. MOFF separates nonempty sections and ends the
+table. Each operand includes all configurations. Numerically zero fields receive
+no vignetting operands; invariant and solved thicknesses receive no THIC rows.
+
+F3 normalizes inferred equations over varying thicknesses, substitutes prior
+accepted constraints, and collapses redundant spans before ambiguity decisions.
+Prefer fewer varying terms, fewer thickness terms, then equivalent TCOM. Preserve
+precision gates, explicit precedence, and genuine conflict suppression. Synthetic
+Sigma regression pairs are 13.9300+4.1900 / 7.7100+10.4100 = 18.1200 and
+8.6500+2.1500 / 2.2500+8.5500 = 10.8000. Deleted experiments are not restored.
+
+F4 locates the rear boundary of the last curved/aspheric refractive group,
+including cemented groups and planar rear faces, excluding plane coverglass.
+For an eligible solved rear air gap G, insert a no-material plane dummy with
+fixed remainder R=min(G)-1mm; the solve-controlled gap becomes G-R and the solve
+total decreases by R. Preserve source data and every original surface position.
+Report export ID mappings, split values and transformed solves; negative R is
+allowed with warning, not clamped. A downstream TOLE may relocate only when its
+excluded downstream span is invariant. Unsupported relocation is reported and
+left unchanged, not guessed. No insertion absent a qualifying accepted solve.
+
+Finite implementation population: exporter/setup/CLI, solve inference, focused
+export/solve/CLI tests, and COMMANDLINE/FEATURES/ZMX_SYNTAX plus this register.
+Matching, input schema version, catalogue data, and source CSV output are excluded.
+Each checkpoint lands tests and owned documentation with its behavior. Proposed
+commits: `feat(export): add fisheye field preset`, `fix(export): organize
+multi-configuration operands`, `fix(solves): retain independent compensator
+relationships`, `feat(export): decouple rear solves with a dummy surface`.
+
+Review watchlist: degree scaling and preset precedence; numeric equality versus
+source spelling; textual ZMX records and one-based field numbering; redundant
+versus conflicting equations; source mutation, solve residuals, coverglass and
+surface-reference renumbering. Reproduce defects before correction and require
+fresh review of actual diffs, not just green tests. Stop for contradictory host
+evidence, unsupported geometry-preserving transformation, or material scope growth.
+
+Final integration gate: CLI-to-CSV/report/ZMX synthetic combined example; actual
+OpticStudio load/save/reload of MCE, angle fields, all configurations and rear
+dummy solves, including independent post-dummy adjustment. Keep measurements and
+host version in ignored output/. Run `.venv/Scripts/python.exe -m pytest`,
+`-m ruff check .`, `-m ruff format --check .`, `-m pip check`, and
+`git diff --check`. Samples/catalogue must be unchanged. Host-unverified gates
+remain open. No push or deletion of unrelated outputs.
+
+F1 evidence: 169 full tests and 52 exporter/CLI tests pass; Ruff lint/format,
+pip check, and diff check pass. Independent reused reviewer approved after adding
+a CLI-over-metadata precedence regression. Fresh-agent creation hit the tool
+thread limit; user authorized separate-role reuse. F1 is the commit titled
+`feat(export): add fisheye field preset`.
+
+Resumption: F1 complete; F2/F3/F4 pending. Baseline command used
+`-m pytest -q -p no:cacheprovider --basetemp output/pytest_fixes_baseline` (162 pass).
+Next: F2 implementation; F3 independent source/test-only builder. Shared plan edits belong
+to the orchestrator; product edits are serialized. No unresolved scope decision.
+
+### Previous catalogue delivery
+
 | ID | Outcome | Dependency | Acceptance gate | Status |
 | --- | --- | --- | --- | --- |
 | R0 | Organize the revised catalogue and record active policy | — | Data-only migration audit and baseline checks | Complete |

@@ -47,7 +47,7 @@ python -m optimatch INPUT --catalog CSV --output PREFIX
     [--profile {default,canon,nikon,sony,sigma,fujifilm}]
     [--format {csv,zmx,both}]
     [--metadata JSON] [--overwrite]
-    [--field-preset {1-type,m43,aps-c,full-frame,44x33}]
+    [--field-preset {1-type,m43,aps-c,full-frame,44x33,fisheye}]
 ```
 
 | Argument | Meaning / default |
@@ -58,7 +58,7 @@ python -m optimatch INPUT --catalog CSV --output PREFIX
 | `--profile default\|canon\|nikon\|sony\|sigma\|fujifilm` | Glass preference profile; default `default`. |
 | `--format csv\|zmx\|both` | Requested prescription outputs; default `both`. Every successful invocation also writes the JSON report. |
 | `--metadata JSON` | Optional metadata overlay for a CSV prescription only. Cannot replace CSV tables. |
-| `--field-preset 1-type\|m43\|aps-c\|full-frame\|44x33` | ZMX real-image-height y-field preset. Overrides `system.field_preset`, not explicit real-image-height fields. An explicit angle field type conflicts with a preset. Ignored for CSV-only output. No implicit format. |
+| `--field-preset 1-type\|m43\|aps-c\|full-frame\|44x33\|fisheye` | ZMX y-field preset. Overrides `system.field_preset`, not explicit compatible fields. `fisheye` uses angle fields; other presets use real image height. An explicit incompatible field type conflicts with a preset. Ignored for CSV-only output. No implicit format. |
 | `--overwrite` | Replace existing requested output files. Without it, existing outputs cause an error. Inputs remain protected. |
 | `-h`, `--help` | Display usage and exit without reading inputs. |
 
@@ -98,7 +98,7 @@ overlay. Pass `--metadata PATH` only with a sectioned CSV input. Requested outpu
 are validated before writing; replacing several files is not a single transaction.
 
 ZMX output requires explicit OBJ and IMG endpoints and one internal stop.
-Specify fields explicitly or select a sensor-format preset; setup defaults are
+Specify fields explicitly or select a field preset; setup defaults are
 described below. Explicit wavelengths/weights must be positive.
 It writes UTF-16 LE with a BOM and preserves source coefficients. Source distances
 remain in CSV/report; ZMX applies disclosed solve adjustments and derivations.
@@ -111,20 +111,22 @@ loaded by OpticStudio.
 
 ### Setup defaults and field presets
 
-Add `--field-preset aps-c` to use a format preset, or set
+Add `--field-preset aps-c` to use a field preset, or set
 `"system": {"field_preset": "aps-c"}` in JSON/CSV metadata. Format is never guessed.
-Explicit real-image-height field arrays take precedence over a preset. Supplying
-a preset with an explicit `angle` field type is an error even when fields are
-present; omit the preset to use angle fields. Heights below are millimetres,
-converted for other lens units.
+Explicit fields take precedence over a preset. `fisheye` requires angle fields;
+the other presets require real image height. Supplying an incompatible explicit
+field type is an error even when fields are present. Heights below are
+millimetres, converted for other lens units; fisheye angles are degrees and are
+not scaled by lens units.
 
-| Preset | Y image heights (mm) |
+| Preset | Y fields (mm unless noted) |
 | --- | --- |
 | `1-type` | 0, 1.6, 3.2, 4.8, 6.4, 8 |
 | `m43` | 0, 2, 4, 6, 8.5, 11 |
 | `aps-c` | 0, 3, 6, 9, 12, 15 |
 | `full-frame` | 0, 4, 8, 12, 17, 22 |
 | `44x33` | 0, 5, 10, 15, 21, 27 |
+| `fisheye` | 0, 18, 36, 54, 72, 89 degrees (angle field type) |
 
 Absent wavelength data uses the five sample wavelengths in their original order:
 0.486133, 0.546073, 0.656273, 0.587562, 0.435833 micrometres; weights are

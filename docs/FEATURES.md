@@ -74,8 +74,9 @@ the materials or tolerances of production lenses.
 ## Study outputs
 
 - Provide the user's five-wavelength study setup in the sample order, with the
-  e line primary, plus selectable 1-type, M43, APS-C, full-frame and 44x33 field
-  presets. Preserve explicit settings rather than silently overriding them.
+  e line primary, plus selectable 1-type, M43, APS-C, full-frame, 44x33, and
+  fisheye field presets. Fisheye uses angle fields; preserve explicit settings
+  rather than silently overriding them.
 - Default to radial real-image-height y fields, unit field weights, paraxial ray
   aiming and the stop as global coordinate reference. Use paraxial working
   f-number, leaving a warned zero placeholder when the aperture is unspecified.

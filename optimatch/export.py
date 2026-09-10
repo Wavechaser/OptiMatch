@@ -124,6 +124,11 @@ FIELD_PRESETS = {
     "aps-c": ("0", "3", "6", "9", "12", "15"),
     "full-frame": ("0", "4", "8", "12", "17", "22"),
     "44x33": ("0", "5", "10", "15", "21", "27"),
+    "fisheye": ("0", "18", "36", "54", "72", "89"),
+}
+_FIELD_PRESET_TYPES = {
+    **{name: "real_image_height" for name in FIELD_PRESETS if name != "fisheye"},
+    "fisheye": "angle",
 }
 _DEFAULT_WAVELENGTHS = tuple(
     Wavelength(value, weight, index == 2)
@@ -148,16 +153,31 @@ def _setup(prescription: Prescription, field_preset: str | None):
         raise ValueError(
             f"unknown field_preset {preset!r}; choose {', '.join(FIELD_PRESETS)}"
         )
-    field_type = source.field_type or "real_image_height"
-    if preset and field_type != "real_image_height":
-        raise ValueError("field_preset requires real_image_height fields")
+    preset_field_type = _FIELD_PRESET_TYPES.get(preset) if preset else None
+    if (
+        source.field_type
+        and preset_field_type
+        and source.field_type != preset_field_type
+    ):
+        raise ValueError(f"field_preset {preset!r} requires {preset_field_type} fields")
+    field_type = source.field_type or preset_field_type or "real_image_height"
     fields = source.fields
     if not fields and preset:
-        millimetres_per_unit = {"mm": "1", "cm": "10", "m": "1000", "in": "25.4"}
-        scale = Decimal(millimetres_per_unit[prescription.units])
-        fields = tuple(str(Decimal(value) / scale) for value in FIELD_PRESETS[preset])
+        if field_type == "angle":
+            fields = FIELD_PRESETS[preset]
+        else:
+            millimetres_per_unit = {
+                "mm": "1",
+                "cm": "10",
+                "m": "1000",
+                "in": "25.4",
+            }
+            scale = Decimal(millimetres_per_unit[prescription.units])
+            fields = tuple(
+                str(Decimal(value) / scale) for value in FIELD_PRESETS[preset]
+            )
     if not fields:
-        raise ValueError("ZMX requires system.fields or --field-preset (sensor format)")
+        raise ValueError("ZMX requires system.fields or --field-preset")
     aperture = source.aperture_value
     aperture_source = "system"
     if aperture is None:

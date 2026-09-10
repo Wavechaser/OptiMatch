@@ -40,7 +40,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--field-preset",
         choices=tuple(FIELD_PRESETS),
-        help="sensor-format y fields for ZMX (explicit fields take precedence)",
+        help="ZMX field preset (explicit fields take precedence)",
     )
     return parser
 

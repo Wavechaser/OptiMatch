@@ -387,6 +387,49 @@ def test_setup_presets_defaults_and_source_preservation(preset, expected):
     assert report["zmx"]["setup"]["warnings"]
 
 
+@pytest.mark.parametrize("units", ["mm", "cm", "m", "in"])
+def test_fisheye_preset_uses_unscaled_angle_fields(units):
+    base = result()
+    base = replace(
+        base,
+        prescription=replace(base.prescription, units=units, system=None),
+    )
+    content, report = render_zmx(base, field_preset="fisheye")
+    lines = content.decode("utf-16").splitlines()
+    assert "FTYP 0 0 6 5 0 0 0 2" in lines
+    assert "YFLN 0 18 36 54 72 89" in lines
+    assert report["zmx"]["setup"]["field_type"] == "angle"
+
+
+def test_fisheye_preset_keeps_explicit_compatible_fields():
+    base = result()
+    system = SystemSettings(field_type="angle", fields=("0", "42"))
+    changed = replace(base, prescription=replace(base.prescription, system=system))
+    text = render_zmx(changed, field_preset="fisheye")[0].decode("utf-16")
+    assert "FTYP 0 0 2 5 0 0 0 2" in text
+    assert "YFLN 0 42\n" in text
+
+
+def test_fisheye_metadata_preset_infers_angle_fields():
+    prescription = prescription_from_dict(
+        {
+            "schema_version": 1,
+            "title": "fisheye",
+            "units": "cm",
+            "surfaces": [
+                {"id": "OBJ", "radius": "0", "thickness": "infinity"},
+                {"id": "STOP", "radius": "0", "thickness": "1", "stop": True},
+                {"id": "IMG", "radius": "0", "thickness": ""},
+            ],
+            "system": {"field_preset": "fisheye"},
+        }
+    )
+    base = replace(result(), prescription=prescription, matches=())
+    text = render_zmx(base)[0].decode("utf-16")
+    assert "FTYP 0 0 6 5 0 0 0 2" in text
+    assert "YFLN 0 18 36 54 72 89" in text
+
+
 def test_preset_json_input_units_and_explicit_precedence():
     prescription = prescription_from_dict(
         {
@@ -440,6 +483,10 @@ def test_setup_rejects_unknown_preset_wrong_field_type_and_negative_aperture():
     for system, message in [
         (SystemSettings(field_preset="guess"), "unknown field_preset"),
         (SystemSettings(field_type="angle", field_preset="aps-c"), "real_image_height"),
+        (
+            SystemSettings(field_type="real_image_height", field_preset="fisheye"),
+            "angle",
+        ),
         (SystemSettings(field_preset="aps-c", aperture_value="-1"), "nonnegative"),
     ]:
         base = result()

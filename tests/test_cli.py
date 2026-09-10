@@ -10,6 +10,7 @@ def test_cli_profile_choices_include_all_profiles_and_reject_unknown():
 
     help_text = _parser().format_help()
     assert "{default,canon,nikon,sony,sigma,fujifilm}" in help_text
+    assert "fisheye" in help_text
     with pytest.raises(SystemExit):
         _parser().parse_args(
             ["input", "--catalog", "catalog", "--output", "out", "--profile", "unknown"]
@@ -42,6 +43,36 @@ def test_cli_setup_defaults_and_zero_aperture_warning(tmp_path, capsys, via_meta
     text = (tmp_path / "preset.zmx").read_text(encoding="utf-16")
     assert "YFLN 0 4 8 12 17 22" in text
     assert "PWAV 2" in text and "FNUM 0 1" in text
+
+
+def test_cli_fisheye_preset_overrides_metadata_preset(tmp_path):
+    source, catalog = write_inputs(tmp_path)
+    data = json.loads(source.read_text(encoding="utf-8"))
+    data["surfaces"] = [
+        {"id": "OBJ", "radius": "0", "thickness": "infinity"},
+        {"id": "STOP", "radius": "10", "thickness": "2", "stop": True},
+        {"id": "IMG", "radius": "0", "thickness": ""},
+    ]
+    data["system"] = {"field_preset": "full-frame"}
+    source.write_text(json.dumps(data), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                str(source),
+                "--catalog",
+                str(catalog),
+                "--output",
+                str(tmp_path / "fisheye"),
+                "--field-preset",
+                "fisheye",
+            ]
+        )
+        == 0
+    )
+    text = (tmp_path / "fisheye.zmx").read_text(encoding="utf-16")
+    assert "FTYP 0 0 6 5 0 0 0 2" in text
+    assert "YFLN 0 18 36 54 72 89" in text
 
 
 def write_inputs(tmp_path):
