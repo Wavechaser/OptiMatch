@@ -21,8 +21,10 @@ SQLite/database storage are out of scope.
 - `docs/`: project documentation, named in uppercase snake case. `FEATURES.md`
   describes desired behavior; `IMPLEMENTATION_PLAN.md` defines engineering
   decisions and checkpoint status; `ZMX_SYNTAX.md` records known serialization
-  details with evidence and uncertainty. Keep these roles distinct and update
-  each with the behavior it governs. README is the entry point.
+  details with evidence and uncertainty. `COMMANDLINE.md` owns the complete CLI
+  reference, input examples and development commands. Keep these roles distinct
+  and update each with the behavior it governs. README contains only a brief
+  project description, minimal setup/quickstart and documentation links.
 - `.github/workflows/`: lightweight automated checks only.
 - `output/`: ignored generated prescriptions and diagnostic artifacts. Remove
   only your own temporary artifacts; never clean user inputs automatically.
@@ -35,7 +37,8 @@ SQLite/database storage are out of scope.
 Use native PowerShell and `.venv/Scripts/python.exe` on Windows. Dependencies
 and tool settings live in `pyproject.toml`; do not add a second requirements list.
 Keep runtime dependencies minimal and add optional OCR/Office dependencies only
-when their features are implemented. Use pytest and Ruff; see README for commands.
+when their features are implemented. Use pytest and Ruff; see docs/COMMANDLINE.md
+for commands.
 
 Read the relevant code and samples before editing. Make surgical changes and
 preserve unrelated user work. Verify behavior with focused tests, then run the

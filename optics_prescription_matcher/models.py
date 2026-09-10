@@ -71,6 +71,7 @@ class SystemSettings:
     field_type: str | None = None
     fields: tuple[str, ...] = ()
     wavelengths: tuple[Wavelength, ...] = ()
+    field_preset: str | None = None
 
 
 @dataclass(frozen=True)

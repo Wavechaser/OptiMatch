@@ -271,6 +271,7 @@ def _system(data: Any) -> SystemSettings:
         "field_type",
         "fields",
         "wavelengths",
+        "field_preset",
     }
     _keys(data, allowed, context)
 
@@ -302,7 +303,7 @@ def _system(data: Any) -> SystemSettings:
         wavelengths.append(Wavelength(value, weight, primary))
     if primary_count > 1:
         raise _error("system.wavelengths", "at most one wavelength may be primary")
-    for key in ("stop_surface", "aperture_type", "field_type"):
+    for key in ("stop_surface", "aperture_type", "field_type", "field_preset"):
         if key in data and data[key] is not None and not isinstance(data[key], str):
             raise _error(f"{context}.{key}", "must be a string or null")
     if data.get("aperture_type") not in {None, "f_number"}:
@@ -316,6 +317,7 @@ def _system(data: Any) -> SystemSettings:
         data.get("field_type"),
         strings("fields"),
         tuple(wavelengths),
+        data.get("field_preset"),
     )
 
 

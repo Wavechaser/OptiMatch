@@ -15,6 +15,33 @@ Accept future OCR results through the same structured input contract.
 
 ## Scope and decisions
 
+### Setup defaults and presets (2026-09-10 follow-up)
+
+Implement export-time defaults without rewriting transcription: five sample
+wavelengths in their original order (six significant digits, four for weights),
+primary #2; real-image-height radial y fields with unit weights and zero
+vignetting; the requested RAIM string; GLRS at the mapped stop. Preserve explicit
+wavelength/field settings. Add `system.field_preset` and CLI `--field-preset`
+choices `1-type`, `m43`, `aps-c`, `full-frame`, `44x33`; never infer a format.
+Preset heights are millimetres and convert to source lens units. Explicit fields
+take precedence; a preset with an explicit non-image-height field type is an error.
+Default aperture type is paraxial working f-number; take the base value, otherwise
+the first configuration's aperture, otherwise emit zero as an incomplete setup
+placeholder with a report warning (not a trace-ready claim). Negative values fail.
+Do not copy the rest of a sample header indiscriminately. Scope: models/input,
+export/CLI, their tests and documentation. Verify sample values, regression tests,
+and loaded host settings, including wavelength count, ray aiming and GLRS.
+Preserve pre-existing sample changes and the untracked XLSX file. The subsequent
+user request authorizes committing these setup changes together with the complete
+CLI reference in COMMANDLINE.md and a minimal README, before upstream research.
+
+Completion: defaults and presets are implemented; 106 tests pass. OpticStudio
+2023 R1.00 confirmed five active wavelengths/primary #2, radial image-height
+fields, Paraxial aiming, stop global reference and zero-aperture persistence.
+A wavelength-count-only control changed the active count to three, proving the
+fourth FTYP number's role. A nonzero-aperture generated model traced successfully;
+zero-aperture output remains explicitly incomplete. See ZMX_SYNTAX.md for values.
+
 ### Implementation boundary
 
 Implement one package with ordinary functions and small dataclasses: `models.py`

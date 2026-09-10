@@ -3,13 +3,13 @@
 import csv
 import io
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import TextIO
 
 from .matching import MatchingResult
-from .models import Asphere, Prescription
+from .models import Asphere, Prescription, SystemSettings, Wavelength
 from .solves import resolve_solves
 
 
@@ -117,6 +117,75 @@ def render_prescription_csv(prescription: Prescription) -> str:
 
 _UNIT_TOKENS = {"mm": "MM", "cm": "CM", "in": "IN", "m": "METER"}
 _FIELD_TYPES = {"angle": 0, "real_image_height": 3}
+FIELD_PRESETS = {
+    "1-type": ("0", "1.6", "3.2", "4.8", "6.4", "8"),
+    "m43": ("0", "2", "4", "6", "8.5", "11"),
+    "aps-c": ("0", "3", "6", "9", "12", "15"),
+    "full-frame": ("0", "4", "8", "12", "17", "22"),
+    "44x33": ("0", "5", "10", "15", "21", "27"),
+}
+_DEFAULT_WAVELENGTHS = tuple(
+    Wavelength(value, weight, index == 2)
+    for index, (value, weight) in enumerate(
+        (
+            ("0.486133", "0.9393"),
+            ("0.546073", "1.000"),
+            ("0.656273", "0.7349"),
+            ("0.587562", "0.9507"),
+            ("0.435833", "0.7868"),
+        ),
+        1,
+    )
+)
+
+
+def _setup(prescription: Prescription, field_preset: str | None):
+    """Resolve export settings without changing the source prescription."""
+    source = prescription.system or SystemSettings()
+    preset = field_preset or source.field_preset
+    if preset is not None and preset not in FIELD_PRESETS:
+        raise ValueError(
+            f"unknown field_preset {preset!r}; choose {', '.join(FIELD_PRESETS)}"
+        )
+    field_type = source.field_type or "real_image_height"
+    if preset and field_type != "real_image_height":
+        raise ValueError("field_preset requires real_image_height fields")
+    fields = source.fields
+    if not fields and preset:
+        millimetres_per_unit = {"mm": "1", "cm": "10", "m": "1000", "in": "25.4"}
+        scale = Decimal(millimetres_per_unit[prescription.units])
+        fields = tuple(str(Decimal(value) / scale) for value in FIELD_PRESETS[preset])
+    if not fields:
+        raise ValueError("ZMX requires system.fields or --field-preset (sensor format)")
+    aperture = source.aperture_value
+    aperture_source = "system"
+    if aperture is None:
+        aperture = (
+            prescription.configurations[0].aperture
+            if prescription.configurations
+            else None
+        )
+        aperture_source = "first_configuration" if aperture is not None else "undefined"
+    system = replace(
+        source,
+        aperture_type=source.aperture_type or "f_number",
+        aperture_value=aperture if aperture is not None else "0",
+        field_type=field_type,
+        fields=fields,
+        wavelengths=source.wavelengths or _DEFAULT_WAVELENGTHS,
+    )
+    details = {
+        "field_preset": preset,
+        "fields_source": "explicit" if source.fields else "preset",
+        "field_type": field_type,
+        "fields": list(fields),
+        "wavelengths_source": "explicit" if source.wavelengths else "sample_default",
+        "wavelengths": [asdict(item) for item in system.wavelengths],
+        "aperture_source": aperture_source,
+        "aperture_value": system.aperture_value,
+        "warnings": [],
+    }
+    return system, details
 
 
 def _curvature(radius: str) -> str:
@@ -168,8 +237,8 @@ def _validate_zmx(result: MatchingResult) -> tuple[dict[str, int], str]:
         raise ValueError(f"ZMX system missing {', '.join(missing)}")
     if system.aperture_type != "f_number":
         raise ValueError("ZMX supports only f_number aperture")
-    if Decimal(system.aperture_value) <= 0:  # type: ignore[arg-type]
-        raise ValueError("ZMX aperture_value must be positive")
+    if Decimal(system.aperture_value) < 0:  # type: ignore[arg-type]
+        raise ValueError("ZMX aperture_value must be nonnegative")
     if system.field_type not in _FIELD_TYPES:
         raise ValueError("ZMX unsupported field_type")
     for index, wavelength in enumerate(system.wavelengths):
@@ -229,12 +298,13 @@ def _asphere_lines(asphere: Asphere) -> list[str]:
     return lines
 
 
-def render_zmx(result: MatchingResult) -> tuple[bytes, dict[str, object]]:
+def render_zmx(
+    result: MatchingResult, *, field_preset: str | None = None
+) -> tuple[bytes, dict[str, object]]:
     """Validate and render one narrowly supported sequential ZMX study model."""
-    prescription = result.prescription
-    ids, stop = _validate_zmx(result)
-    system = prescription.system
-    assert system is not None
+    system, setup = _setup(result.prescription, field_preset)
+    prescription = replace(result.prescription, system=system)
+    ids, stop = _validate_zmx(replace(result, prescription=prescription))
     solves = resolve_solves(prescription)
     aspheres = {item.surface_id: item for item in prescription.aspheres}
     matches = {item.surface_id: item for item in result.matches}
@@ -244,6 +314,8 @@ def render_zmx(result: MatchingResult) -> tuple[bytes, dict[str, object]]:
         f"NAME {prescription.title}",
         f"UNIT {_UNIT_TOKENS[prescription.units]} X W X CM MR CPMM",
         f"FNUM {system.aperture_value} 1",
+        "RAIM 0 1 1 1 0 0 0 0 0 1",
+        f"GLRS {ids[stop]} 0",
         f"FTYP {_FIELD_TYPES[system.field_type]} 0 {len(system.fields)} "
         f"{len(system.wavelengths)} 0 0 0 2",
         "XFLN " + " ".join("0" for _ in system.fields),
@@ -253,7 +325,8 @@ def render_zmx(result: MatchingResult) -> tuple[bytes, dict[str, object]]:
     for index, wavelength in enumerate(system.wavelengths, 1):
         lines.append(f"WAVM {index} {wavelength.value} {wavelength.weight}")
     primary = next(
-        (index for index, item in enumerate(system.wavelengths, 1) if item.primary), 1
+        (index for index, item in enumerate(system.wavelengths, 1) if item.primary),
+        2 if len(system.wavelengths) >= 2 else 1,
     )
     lines.append(f"PWAV {primary}")
     for key in ("VDXN", "VDYN", "VCXN", "VCYN"):
@@ -310,9 +383,9 @@ def render_zmx(result: MatchingResult) -> tuple[bytes, dict[str, object]]:
             ):
                 aperture = configuration.aperture or system.aperture_value
                 assert aperture is not None
-                if Decimal(aperture) <= 0:
+                if Decimal(aperture) < 0:
                     raise ValueError(
-                        f"configuration {configuration.name}: aperture must be positive"
+                        f"configuration {configuration.name}: aperture must be nonnegative"
                     )
                 lines.append(f"APER 0 {config_index} {aperture} {tail}")
         for field_index in range(1, len(system.fields) + 1):
@@ -326,11 +399,21 @@ def render_zmx(result: MatchingResult) -> tuple[bytes, dict[str, object]]:
         for field_index in range(1, len(system.fields) + 1):
             lines.append(f"FVCY {field_index} 1 0 {tail}")
             lines.append(f"FVDY {field_index} 1 0 {tail}")
+    if Decimal(system.aperture_value) == 0 or any(
+        item.aperture is not None and Decimal(item.aperture) == 0
+        for item in prescription.configurations
+    ):
+        setup["warnings"].append(
+            "Zero f-number is an incomplete setup placeholder; set an aperture before optical analysis."
+        )
     report = {
         "zmx": {
             "status": "rendered",
             "host_validation": "unverified for this output",
             "surface_map": ids,
+            "setup": setup,
+            "global_coordinate_reference": ids[stop],
+            "ray_aiming_record": "0 1 1 1 0 0 0 0 0 1",
             "primary_wavelength": primary,
             "primary_wavelength_defaulted": not any(
                 item.primary for item in system.wavelengths

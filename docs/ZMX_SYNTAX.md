@@ -37,6 +37,8 @@ Do not confuse character encoding with the precision of numerical values.
 | `NAME ...` | Model title. |
 | `UNIT MM X W X CM MR CPMM` | Lens unit tokens `MM`, `CM`, `IN`, `METER` confirmed by API saves in 2023 R1.00. Remaining tokens are not decoded here. |
 | `FNUM value 1` | Confirmed ParaxialWorkingFNum aperture type in 2023 R1.00. Other flags/types remain separate contracts. |
+| `RAIM 0 1 1 1 0 0 0 0 0 1` | Requested preset; generated-file API readback confirms Paraxial aiming. Do not infer each individual flag. |
+| `GLRS surface 0` | Global coordinate reference surface; emit the mapped stop number. Confirmed by controlled host read/save. |
 | `ENPD value` | Confirmed EntrancePupilDiameter aperture definition in lens units, 2023 R1.00. |
 | `GCAT OHARA_2021-04` | Named catalogue list; optional under the user's tested automatic discovery behavior. |
 | `FTYP ...`, `XFLN ...`, `YFLN ...`, `FWGN ...` | Field definition, coordinates, and weights; do not copy field-type flags without confirming their meaning. |
@@ -286,3 +288,45 @@ overwritten. Host scripts and generated files are ignored local evidence, not
 runtime dependencies; the committed tests retain regressions for these seams.
 This validates the supported exporter subset, not unknown ZMX flags, arbitrary
 installed-catalogue availability, or production optical performance.
+
+### Setup-default controls, 2026-09-10
+
+The follow-up user request explicitly authorizes the shared sample wavelengths,
+paraxial ray aiming and format-specific field defaults. Only the first five
+wavelengths are active. The remaining 0.55/1 entries are unused saved slots and
+are not emitted. Default records, rounded to six significant wavelength digits
+and four weight digits, retain their original order:
+
+```text
+WAVM 1 0.486133 0.9393
+WAVM 2 0.546073 1.000
+WAVM 3 0.656273 0.7349
+WAVM 4 0.587562 0.9507
+WAVM 5 0.435833 0.7868
+PWAV 2
+```
+
+In `FTYP type normalization field_count wavelength_count ...`, type 3 is real
+image height and normalization 0 read back as Radial. Changing only the fourth
+number from 5 to 3 while retaining all five WAVM records changed the API active
+count to 3. Thus WAVM record presence does not define active count. The remaining
+FTYP flags are not fully decoded; the established emitted tail is `0 0 0 2`.
+The six-field host save rewrites the last value to 6; this is not treated as a
+general meaning for that field.
+
+`output/setup_defaults.zmx` loaded six APS-C Y heights [0,3,6,9,12,15], the five
+wavelength/weight pairs above, primary #2, RealImageHeight/Radial fields,
+Paraxial aiming and ParaxialWorkingFNum=8. GCRS.GetSelectedSurface() returned
+stop surface 1 and GLRS 1 0 survived the host save.
+The on-axis pupil-y 0.7 ray reached the image with error/vignette codes 0 and
+image y=-0.25821875531804594. The zero-aperture control retained FNUM 0 1;
+this verifies a loadable placeholder, not trace readiness. All writes were
+ignored generated files; reference samples were not rewritten.
+
+The requested RAIM string is retained as a tested whole record. In this generated
+model the API reports automatic pupil shifts enabled, cache enabled and robust
+aiming disabled; not every flag's position is established. Official
+[ray-aiming documentation](https://ansyshelp.ansys.com/public/Views/Secured/Zemax/v251/en/OpticStudio_User_Guide/OpticStudio_Help/topics/Ray_Aiming.html)
+explains the optical distinction between paraxial and real aiming, not a complete
+RAIM serialization contract. Do not copy other sample header settings without
+a separate purpose and verification.

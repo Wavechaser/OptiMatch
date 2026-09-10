@@ -8,7 +8,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .export import merge_export_report, render_prescription_csv, render_zmx
+from .export import (
+    FIELD_PRESETS,
+    merge_export_report,
+    render_prescription_csv,
+    render_zmx,
+)
 from .inputs import (
     InputError,
     load_catalog_csv,
@@ -33,6 +38,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--format", choices=("csv", "zmx", "both"), default="both")
+    parser.add_argument(
+        "--field-preset",
+        choices=tuple(FIELD_PRESETS),
+        help="sensor-format y fields for ZMX (explicit fields take precedence)",
+    )
     return parser
 
 
@@ -119,13 +129,16 @@ def main(argv: list[str] | None = None) -> int:
             outputs[csv_path] = render_prescription_csv(result.prescription)
         zmx_report = None
         if args.format in {"zmx", "both"}:
-            zmx_bytes, zmx_report = render_zmx(result)
+            zmx_bytes, zmx_report = render_zmx(result, field_preset=args.field_preset)
             outputs[zmx_path] = zmx_bytes
         outputs[report_path] = merge_export_report(result, zmx_report)
         _write_outputs(outputs, args.overwrite)
     except (InputError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if zmx_report:
+        for warning in zmx_report["zmx"]["setup"]["warnings"]:
+            print(f"warning: {warning}", file=sys.stderr)
     summary = result.report()["summary"]
     written = ", ".join(str(path) for path in outputs)
     print(

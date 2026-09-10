@@ -1,8 +1,10 @@
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
 
 from optics_prescription_matcher.export import _asphere_lines, render_zmx
+from optics_prescription_matcher.inputs import prescription_from_dict
 from optics_prescription_matcher.matching import Match, MatchingResult
 from optics_prescription_matcher.models import (
     Asphere,
@@ -203,3 +205,100 @@ def test_zmx_rejects_reserved_internal_ids_and_control_character_material():
     unsafe = result(material="BAD\x00TOKEN")
     with pytest.raises(ValueError, match="unsafe ZMX token"):
         render_zmx(unsafe)
+
+
+@pytest.mark.parametrize(
+    "preset, expected",
+    [
+        ("1-type", "0 1.6 3.2 4.8 6.4 8"),
+        ("m43", "0 2 4 6 8.5 11"),
+        ("aps-c", "0 3 6 9 12 15"),
+        ("full-frame", "0 4 8 12 17 22"),
+        ("44x33", "0 5 10 15 21 27"),
+    ],
+)
+def test_setup_presets_defaults_and_source_preservation(preset, expected):
+    base = result()
+    base = replace(base, prescription=replace(base.prescription, system=None))
+    content, report = render_zmx(base, field_preset=preset)
+    lines = content.decode("utf-16").splitlines()
+    assert f"YFLN {expected}" in lines
+    assert "FTYP 3 0 6 5 0 0 0 2" in lines
+    assert "XFLN 0 0 0 0 0 0" in lines
+    assert "FWGN 1 1 1 1 1 1" in lines
+    for token in ("VDXN", "VCXN", "VDYN", "VCYN"):
+        assert f"{token} 0 0 0 0 0 0" in lines
+    assert [line for line in lines if line.startswith("WAVM")] == [
+        "WAVM 1 0.486133 0.9393",
+        "WAVM 2 0.546073 1.000",
+        "WAVM 3 0.656273 0.7349",
+        "WAVM 4 0.587562 0.9507",
+        "WAVM 5 0.435833 0.7868",
+    ]
+    assert "PWAV 2" in lines and "FNUM 0 1" in lines
+    assert "RAIM 0 1 1 1 0 0 0 0 0 1" in lines
+    assert "GLRS 1 0" in lines
+    assert base.prescription.system is None
+    assert report["zmx"]["setup"]["warnings"]
+
+
+def test_preset_json_input_units_and_explicit_precedence():
+    prescription = prescription_from_dict(
+        {
+            "schema_version": 1,
+            "title": "preset",
+            "units": "cm",
+            "surfaces": [
+                {"id": "OBJ", "radius": "0", "thickness": "infinity"},
+                {"id": "STOP", "radius": "0", "thickness": "1", "stop": True},
+                {"id": "IMG", "radius": "0", "thickness": ""},
+            ],
+            "system": {"field_preset": "full-frame"},
+        }
+    )
+    base = replace(result(), prescription=prescription, matches=())
+    text = render_zmx(base)[0].decode("utf-16")
+    assert "YFLN 0 0.4 0.8 1.2 1.7 2.2" in text
+    system = replace(
+        prescription.system,
+        fields=("0", "0.8"),
+        wavelengths=(Wavelength("0.55555555", "0.123456", True),),
+    )
+    changed = replace(base, prescription=replace(prescription, system=system))
+    text = render_zmx(changed, field_preset="aps-c")[0].decode("utf-16")
+    assert "YFLN 0 0.8\n" in text
+    assert "WAVM 1 0.55555555 0.123456" in text and "PWAV 1" in text
+
+
+def test_setup_aperture_from_configuration_and_mapped_stop():
+    base = result(
+        configurations=(Configuration("one", {}, "2.8"), Configuration("two", {}, "4"))
+    )
+    surfaces = tuple(
+        replace(s, stop=(s.source_id == "2")) for s in base.prescription.surfaces
+    )
+    base = replace(
+        base,
+        prescription=replace(
+            base.prescription,
+            surfaces=surfaces,
+            system=SystemSettings(field_preset="m43"),
+        ),
+    )
+    text, report = render_zmx(base)
+    assert "FNUM 2.8 1" in text.decode("utf-16")
+    assert "GLRS 2 0" in text.decode("utf-16")
+    assert report["zmx"]["setup"]["aperture_source"] == "first_configuration"
+
+
+def test_setup_rejects_unknown_preset_wrong_field_type_and_negative_aperture():
+    for system, message in [
+        (SystemSettings(field_preset="guess"), "unknown field_preset"),
+        (SystemSettings(field_type="angle", field_preset="aps-c"), "real_image_height"),
+        (SystemSettings(field_preset="aps-c", aperture_value="-1"), "nonnegative"),
+    ]:
+        base = result()
+        with pytest.raises(ValueError, match=message):
+            render_zmx(
+                replace(base, prescription=replace(base.prescription, system=system))
+            )

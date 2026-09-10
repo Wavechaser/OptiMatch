@@ -1,6 +1,36 @@
 import json
 
+import pytest
+
 from optics_prescription_matcher.__main__ import main
+
+
+@pytest.mark.parametrize("via_metadata", [False, True])
+def test_cli_setup_defaults_and_zero_aperture_warning(tmp_path, capsys, via_metadata):
+    source, catalog = write_inputs(tmp_path)
+    data = json.loads(source.read_text(encoding="utf-8"))
+    data["surfaces"] = [
+        {"id": "OBJ", "radius": "0", "thickness": "infinity"},
+        {"id": "stop", "radius": "10", "thickness": "2", "stop": True},
+        {"id": "IMG", "radius": "0", "thickness": ""},
+    ]
+    if via_metadata:
+        data["system"] = {"field_preset": "full-frame"}
+    source.write_text(json.dumps(data), encoding="utf-8")
+    args = [
+        str(source),
+        "--catalog",
+        str(catalog),
+        "--output",
+        str(tmp_path / "preset"),
+    ]
+    if not via_metadata:
+        args.extend(["--field-preset", "full-frame"])
+    assert main(args) == 0
+    assert "incomplete setup placeholder" in capsys.readouterr().err
+    text = (tmp_path / "preset.zmx").read_text(encoding="utf-16")
+    assert "YFLN 0 4 8 12 17 22" in text
+    assert "PWAV 2" in text and "FNUM 0 1" in text
 
 
 def write_inputs(tmp_path):
