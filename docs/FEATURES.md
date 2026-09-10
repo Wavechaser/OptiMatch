@@ -1,7 +1,8 @@
 # Desired features
 
 Status: validated JSON/CSV inputs, deterministic glass matching, CSV/ZMX output,
-and the JSON report CLI are implemented. OCR below remains planned.
+and the JSON report CLI are implemented. Catalogue modernization, molding-aware
+selection, and model-glass fallback are the current delivery; OCR remains planned.
 Engineering decisions and delivery checkpoints belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).
@@ -35,6 +36,9 @@ the materials or tolerances of production lenses.
 - Default to Ohara, then Hoya, then Hikari, then other catalogues. A selected
   manufacturer profile may change priorities or explicitly exclude catalogues;
   a preference alone does not exclude alternatives.
+- Offer explicit Canon, Nikon, Sony, Sigma, and Fujifilm study profiles. Apply
+  each profile's exclusions before ranking, but never infer a profile from a
+  filename or override an explicitly supplied material.
 - Within the close range, allow profile preferences to outweigh insignificant
   numerical differences. Use supplied partial dispersion to distinguish
   plausible candidates. Prefer shorter typecodes for otherwise equivalent
@@ -42,10 +46,17 @@ the materials or tolerances of production lenses.
 - When no close candidate exists, consider offset candidates with absolute
   differences strictly below `0.02` in nd and `2` in Vd. Favor dispersion
   proximity when selecting a suitable base glass.
+- If either boundary of an element is aspheric, first prefer precision-molding
+  candidates within the bounded window `|Δnd| < 0.005` and `|ΔVd| < 0.5`.
+  Fall back to ordinary matching when that pool is empty; molding suitability
+  is a preference, not a material-class exclusion.
+- When PgF is supplied without dPgF, derive dPgF from the documented F2–K7
+  normal line so partial dispersion remains useful for selection and export.
 - Calculate offsets as prescription minus catalogue. Display precision should
   reflect the supplied data rather than imply extra measurement accuracy.
-- If no suitable candidate exists, retain the original nd/Vd with no invented
-  typecode or offsets. Make unresolved materials visible before ZMX export.
+- If no suitable catalogue candidate exists, retain the original nd/Vd as an
+  explicit model glass rather than inventing a typecode, offset, zero, or air.
+  Report the fallback distinctly from a named catalogue match.
 - Record the chosen profile, selection reason, and any material ambiguity so the
   user can assess the substitute. Prescription material cells contain typecodes
   only, without manufacturer names.
@@ -90,3 +101,7 @@ supplied-prescription matching and export workflow is usable.
 
 Direct XLSX reading, AGF catalogue parsing, and SQLite/database storage are
 outside the current scope. The catalogue enters the tool as CSV.
+
+Matching on the e-line `ne`/`ve` pair is deferred. The revised catalogue may
+retain those columns for later use, but this delivery neither ranks by them nor
+converts between d-line and e-line properties.

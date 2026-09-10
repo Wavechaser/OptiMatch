@@ -306,8 +306,10 @@ WAVM 5 0.435833 0.7868
 PWAV 2
 ```
 
-In `FTYP type normalization field_count wavelength_count ...`, type 3 is real
-image height and normalization 0 read back as Radial. Changing only the fourth
+In `FTYP type telecentric field_count wavelength_count normalization ...`, type
+3 is real image height and normalization 0 is Radial. The second number is
+object-space telecentricity, not normalization (resolved by the controls below).
+Changing only the fourth
 number from 5 to 3 while retaining all five WAVM records changed the API active
 count to 3. Thus WAVM record presence does not define active count. The remaining
 FTYP flags are not fully decoded; the established emitted tail is `0 0 0 2`.
@@ -330,3 +332,105 @@ aiming disabled; not every flag's position is established. Official
 explains the optical distinction between paraxial and real aiming, not a complete
 RAIM serialization contract. Do not copy other sample header settings without
 a separate purpose and verification.
+
+## Upstream reverse-engineering review (2026-09-10)
+
+Inspected immutable revisions:
+
+- Optiland [`3dd53cbe`](https://github.com/optiland/optiland/tree/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax):
+  reader, converter, surface handlers, encoder and reader/writer tests.
+- quartiq/rayopt [`a51f1dbd`](https://github.com/quartiq/rayopt/blob/a51f1dbd7c11bb79157e23624951c44443e02070/rayopt/zemax.py):
+  `zmx_to_system`, operand handling and source license header.
+
+These implementations are independent evidence, not authoritative specifications
+or lossless import guarantees. No dependency or borrowed production code was added.
+
+### Useful mappings, checked against the host
+
+Optiland's [FTYP reader](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/reader/parser.py#L141-L178)
+identified additional meanings. Controlled API changes on our generated model
+confirmed this partial shape (numbers counted after the keyword):
+
+```text
+FTYP field_type telecentric field_count wavelength_count normalization unknown afocal unknown
+```
+
+| Position | Confirmed interpretation in OpticStudio 2023 R1.00 |
+| --- | --- |
+| 1 | Field type: 0 angle, 1 object height, 2 paraxial image height, 3 real image height. |
+| 2 | Object-space telecentricity: 0 off, 1 on. |
+| 3 | Active field count. |
+| 4 | Active wavelength count, independent of unused WAVM rows. |
+| 5 | Field normalization: 0 Radial, 1 Rectangular. |
+| 7 | Afocal image space: 0 off, 1 on. |
+
+`output/probe_ftyp_semantics.ps1` saved baseline `3 0 6 5 0 0 0 6`,
+telecentric `3 1 6 5 0 0 0 6`, rectangular `3 0 6 5 1 0 0 6`, and afocal
+`3 0 6 5 0 0 1 6`. Toggling telecentricity also made the host disable ray aiming;
+the table does not imply all settings are independent. Our generated defaults
+already use zero for positions 2, 5 and 7; only the earlier documentation label
+needed correction. Positions 6 and 8 remain undecoded.
+
+The [Optiland parser](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/reader/parser.py#L122-L139)
+also distinguishes the trailing FNUM flag (0 imageFNO, 1 paraxialImageFNO), agreeing
+with our tested FNUM value 1. Its GCAT-aware material selection uses the stored
+nd/vd pair to distinguish duplicate glass names: useful supporting evidence for
+keeping sensible cached properties and explicit catalogue identity in reports,
+not a replacement for our manufacturer profiles or offset handling.
+
+Other future leads include circular aperture `CLAP` plus decenter `OBDC`, legacy
+encodings and coordinate-break parameters. They remain outside our exporter scope;
+no extra header flags should be adopted merely because upstream emits them.
+
+### Important Optiland import/export limitations at this revision
+
+- The [reader dispatch](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/reader/parser.py#L43-L76)
+  has no handlers for XDAT, RAIM, GLRS, UNIT, THIC, APER, MNUM, TCOM or TOLE.
+  Extended XASPHERE/XOSPHERE reach an unsupported-type error in the converter;
+  ordinary EVENASPH/ODDASPHE are different supported families. GLAS reads name
+  and nd/vd but not mode-4 offset tails. Thus a successful simple import is not
+  evidence that configurations, offsets or setup survived.
+- The [wavelength reader](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/reader/parser.py#L180-L198)
+  leaves `_ftyp` at its initialized None. For normal four-token WAVM rows it
+  therefore uses token count 4 instead of the declared active count. An isolated
+  execution of the inspected methods with our five wavelengths retained only
+  four, despite recording `num_wavelengths=5`.
+- The [encoder](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/writer/encoder.py#L153-L160)
+  emits wavelength weights as 1. Its [parameter writer](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/optiland/fileio/zemax/writer/encoder.py#L228-L234)
+  omits coefficients with magnitude at most 1e-16. Isolated method controls
+  reproduced both behaviors, including omission of an A16 coefficient of 2e-20.
+  Small coefficient magnitude alone is not a valid sag-error criterion.
+- The reader sorts/deduplicates fields; this is not source-order preservation.
+  The writer hardcodes UNIT MM and uses PFIL for paraxialImageFNO, whereas its
+  reader understands the FNUM flag but has no PFIL handler. Neither behavior
+  should replace our host-tested unit/aperture records.
+
+These are source/method-level findings, not a run of the installed Optiland
+package or its full test suite. Ignored `output/probe_optiland_methods.py` uses
+only inspected methods with lightweight stand-ins. Upstream round-trip tests
+provide useful examples but can preserve a loss already incurred on first import;
+they do not replace comparisons against original source quantities and host rays.
+
+### rayopt: narrower corroboration
+
+The [rayopt reader](https://github.com/quartiq/rayopt/blob/a51f1dbd7c11bb79157e23624951c44443e02070/rayopt/zemax.py#L85-L178)
+corroborates basic curvature, thickness, conic, stop, semi-diameter and nd/vd
+positions. It reads legacy WAVL lists but explicitly ignores WAVM, PWAV, FTYP,
+RAIM, GLRS, MNUM, TYPE, XDAT and TOLE; TCOM/THIC fall through as unhandled.
+It does not apply glass-offset tails. Its distance-before-surface convention
+also differs from our thickness-after-surface representation. It is not a
+validation oracle for the current sample feature set.
+
+### Borrowing decision
+
+Borrow record hypotheses and focused test cases, not either parser wholesale.
+Our extended-asphere, offset and configuration/solve contracts have stronger
+local host evidence. For the other project's Optiland integration, use an
+explicit compatibility gate and source-value checks before trusting ZMX import;
+do not silently flatten unsupported data or call a round trip lossless.
+
+Optiland is [MIT licensed](https://github.com/optiland/optiland/blob/3dd53cbe35ae785d72cb10aea450799d9cede26b/LICENSE);
+copied substantial code must retain its notices. rayopt's parser source declares
+LGPL-3.0-or-later; do not treat it as MIT-compatible copy-and-paste material.
+No code was copied into the runtime, no package installed, and no upstream issue
+or pull request was submitted as part of this investigation.

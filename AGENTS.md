@@ -18,6 +18,9 @@ SQLite/database storage are out of scope.
 - `samples/`: original CSV/ZMX files and `SAMPLE_INSTRUCTIONS.md`;
   preserve their names, encoding, and contents. The sample instructions are a
   historical workflow reference, not a complete executable specification.
+- `catalogs/`: maintained reference-catalogue CSV exports used for matching;
+  preserve their row order and numeric strings, and keep source workbooks in
+  `samples/` rather than treating XLSX as an application input.
 - `docs/`: project documentation, named in uppercase snake case. `FEATURES.md`
   describes desired behavior; `IMPLEMENTATION_PLAN.md` defines engineering
   decisions and checkpoint status; `ZMX_SYNTAX.md` records known serialization

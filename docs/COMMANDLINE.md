@@ -10,6 +10,32 @@ is not implemented. Catalogue input is CSV exported from the
 user's maintained Excel workbook. XLSX parsing, AGF parsing, and SQLite/database
 storage are out of scope. OCR can be added independently later.
 
+## Current delivery note
+
+At the R0 documentation/data checkpoint, the executable still has the command
+surface documented below: only `default`, `canon`, and `nikon` are accepted,
+the historical six-column catalogue schema is required, and an unmatched
+material blocks ZMX output. R1–R3 will update the executable and this reference.
+
+The active delivery policy uses these strict numerical boundaries:
+
+| Outcome | Required absolute difference | Export behavior |
+| --- | --- | --- |
+| Close (including exact) | `abs(Δnd) < 0.0002` and `abs(ΔVd) < 0.1` | Named typecode, no offsets |
+| Near/offset | `abs(Δnd) < 0.02` and `abs(ΔVd) < 2` | Named typecode plus prescription-minus-catalogue offsets |
+| Model glass | No allowed candidate passes either gate | Source nd/Vd, no invented typecode or catalogue offsets |
+
+Equality at a boundary fails that gate. An element bounded by an aspheric front
+or rear surface first considers `PrecisionMolding=1` candidates inside the
+strict promotion window `|Δnd| < 0.005`, `|ΔVd| < 0.5`; an empty promotion pool
+falls back to ordinary matching. This is a bounded preference, not an exclusion
+of polymers, crystals, or ordinary glass.
+
+The completed CLI will accept `default`, `canon`, `nikon`, `sony`, `sigma`, and
+`fujifilm`. Their precise preference orders and exclusions are recorded in
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Profiles are selected only by
+`--profile`, never inferred from a filename. e-line ne/ve matching is deferred.
+
 ## Match a prescription
 
 Complete invocation (there are no subcommands):
@@ -237,6 +263,8 @@ There are no runtime dependencies; development tools are declared in
 - `optics_prescription_matcher/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
+- `catalogs/REFERENCE_CATALOG.csv`: maintained reference-catalogue CSV export;
+  its revised schema becomes executable input in R1.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
 - `samples/sample_lens_data.csv`: worked, multi-section prescription CSV.
 - `samples/EF-M 22mm F2 STM.ZMX` and `samples/14-24mm F2.8 DG DN Art.ZMX`: original

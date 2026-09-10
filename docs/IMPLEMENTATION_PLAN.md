@@ -1,7 +1,8 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
 Status: C1, C2, and C3 implemented and independently reviewed, 2026-09-10.
-This plan applies the plan-work structure with three small implementation commits.
+The R0–R3 catalogue and matching-policy delivery is in progress.
+This plan applies the plan-work structure with small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
 engineering choices, not claims that the historical examples uniquely imply them.
@@ -12,6 +13,94 @@ Produce a credible prescription for optical study using supplied transcription,
 best-effort glass choices, and CSV/ZMX output. Keep the workflow small enough for
 a Python command, with deterministic matching and traceable rounding adjustments.
 Accept future OCR results through the same structured input contract.
+
+## Current delivery register
+
+| ID | Outcome | Dependency | Acceptance gate | Status |
+| --- | --- | --- | --- | --- |
+| R0 | Organize the revised catalogue and record active policy | — | Data-only migration audit and baseline checks | Complete |
+| R1 | Accept the revised catalogue schema and scoped typecode normalization | R0 | Loader and compatibility tests | Pending |
+| R2 | Add profiles, PgF conversion, and asphere-driven molding preference | R1 | Boundary, ownership, and ranking tests | Pending |
+| R3 | Emit and validate model-glass fallbacks | R2 | Integrated CLI and OpticStudio checks | Pending |
+
+R0 moves the maintained CSV to `catalogs/REFERENCE_CATALOG.csv`; source XLSX
+workbooks remain samples and are not application inputs. The migration removes
+whitespace only from Ohara typecodes. Its audit must prove row order and all
+other cells unchanged and must reject any identity collision. This checkpoint
+also records the intended behavior before production code changes.
+
+R0 migration evidence: 1,186 rows were retained; 38 Ohara typecodes changed;
+every other cell was identical; and the normalized manufacturer/typecode keys
+remained unique. The baseline suite passed all 106 tests after migration.
+Fresh read-only review independently confirmed all 38 raw line changes and the
+unchanged Sigma/workbook hashes. Ruff, pip check, and diff checks passed. R0 is
+the commit titled `chore(data): organize reference catalog and record delivery plan`.
+
+R1 accepts required headers `Manufacturer,Typecode,nd,vd,PgF,dPgF` and optional
+`ne,ve,PrecisionMolding`. Legacy partial-dispersion spellings remain input
+aliases, while new output uses the canonical names. `ne` and `ve` must appear as
+a complete pair when populated but remain unused. `PrecisionMolding` accepts
+`1`, `0`, or blank (suitable, unsuitable, unknown). Ohara typecodes remove all
+whitespace before validation and duplicate detection; other manufacturers only
+lose surrounding whitespace. Glasses, polymers, and reference crystals are
+equally eligible. Status/Class filtering, XLSX, AGF, and database readers remain
+out of scope.
+
+R2 keeps strict matching gates: close requires `|Δnd| < 0.0002` and
+`|ΔVd| < 0.1` and emits no offsets; near/offset requires `|Δnd| < 0.02` and
+`|ΔVd| < 2` and emits prescription-minus-catalogue offsets. Equality does not
+pass a gate. For a material following surface *i*, an asphere on surface *i* or
+*i+1* activates a bounded molding preference. Molding-suitable candidates first
+compete within `|Δnd| < 0.005` and `|ΔVd| < 0.5`; if none exist, ordinary
+matching is unchanged. A rear air surface therefore belongs to the preceding
+element, while an outer asphere on a cemented component does not promote the
+entire cemented group. Explicit material names remain authoritative.
+
+Profiles apply exclusions before either candidate pool and never override a
+supplied typecode or arise from a filename:
+
+| Profile | Preference order | Exclusions |
+| --- | --- | --- |
+| default | Ohara > Hoya > Hikari > others | None |
+| canon | Ohara > Hoya > others | Hikari, CDGM, Schott, Sumita |
+| nikon | Hikari > Hoya > Ohara > others | CDGM, Schott, Sumita |
+| sony | Hoya > Ohara > Hikari > others | CDGM, Schott, Sumita |
+| sigma | Hoya > Ohara > others | Hikari, CDGM, Schott, Sumita |
+| fujifilm | Ohara > Hoya > CDGM > Hikari > others | Schott, Sumita |
+
+When PgF is supplied without dPgF, calculate with `Decimal` and retain the
+original strings:
+
+```text
+Pnormal(vd) = 0.582848
+            + (vd - 36.26) * (0.543528 - 0.582848) / (60.49 - 36.26)
+dPgF = PgF - Pnormal(vd)
+```
+
+Supplied dPgF wins. Reports distinguish supplied and derived values; derivation
+does not rewrite transcription fields.
+
+R3 turns a numerically valid material outside both catalogue gates into status
+`model`, retaining source nd/vd and no catalogue identity or offset. Missing or
+invalid optical data still fails. ZMX uses model-glass mode 1 and supplied,
+derived, or default-zero dPgF in that order; a missing dPgF default is not a
+warning. A bounded host experiment will vary the three suspected model-glass
+optimization flags one at a time. If their mapping is confirmed, fixed study
+values use `0 0 0`; otherwise populated nd/vd/dPgF retain the observed `1 1 1`
+fallback and the uncertainty remains documented. Named and offset modes must
+remain unchanged.
+
+Every checkpoint receives focused tests, the full pytest/Ruff/diff checks, and
+fresh adversarial review before its atomic commit. Stop on catalogue-normalizing
+collisions, unexpected input-byte changes, or host behavior contradicting the
+model serialization contract. OCR, e-line matching, optimization, and a general
+ZMX reader are non-goals for this delivery.
+
+## Completed C1–C3 baseline record
+
+The remaining sections preserve the original implemented proposal and evidence.
+Where its earlier matching or unmatched-material policy differs, the current
+R0–R3 register above is authoritative for this delivery.
 
 ## Scope and decisions
 
