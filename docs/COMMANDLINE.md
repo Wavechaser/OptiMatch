@@ -12,10 +12,11 @@ storage are out of scope. OCR can be added independently later.
 
 ## Current delivery note
 
-At the R0 documentation/data checkpoint, the executable still has the command
-surface documented below: only `default`, `canon`, and `nikon` are accepted,
-the historical six-column catalogue schema is required, and an unmatched
-material blocks ZMX output. R1–R3 will update the executable and this reference.
+At the R1 catalogue-input checkpoint, the executable accepts both the historical
+six-column catalogue and the revised nine-column catalogue described below.
+Only `default`, `canon`, and `nikon` profiles are currently accepted, and an
+unmatched material still blocks ZMX output. R2–R3 will add the remaining profiles,
+molding-aware selection, partial-dispersion derivation, and model-glass fallback.
 
 The active delivery policy uses these strict numerical boundaries:
 
@@ -138,14 +139,22 @@ require a named base glass and are preserved, never reinterpreted as air.
 
 ## Prescription inputs
 
-Catalogue input is UTF-8 CSV, optionally with a BOM. All six headers are required:
-`Manufacturer`, `Typecode`, `nd`, `vd`, `P_g,F`, and `d_Pg,F` (quote the two
-comma-containing headers). Dispersion cells may be blank. Extra headers are
-rejected. Optical values must be finite; nd and vd must be positive. Example:
+Catalogue input is UTF-8 CSV, optionally with a BOM. Required headers are
+`Manufacturer`, `Typecode`, `nd`, `vd`, `PgF`, and `dPgF`; the historical
+`P_g,F` and `d_Pg,F` spellings remain accepted aliases. Optional headers are
+`ne`, `ve`, and `PrecisionMolding`. Partial-dispersion cells may be blank. When
+either e-line value is populated, both `ne` and `ve` must be populated; these
+strings are retained but not used for matching. `PrecisionMolding` accepts `1`,
+`0`, or blank. Unknown, duplicate, and alias-colliding headers are rejected.
+Optical values must be finite, with nd/vd and populated ne/ve positive.
+
+Ohara typecodes have all whitespace removed before validation and duplicate
+detection. Other manufacturers lose only surrounding whitespace; internal spaces
+are retained, while control characters remain invalid. Example:
 
 ```csv
-Manufacturer,Typecode,nd,vd,"P_g,F","d_Pg,F"
-Ohara,S-BSL7,1.51633,64.06,,
+Manufacturer,Typecode,nd,vd,ne,ve,PgF,dPgF,PrecisionMolding
+Ohara,S-BSL7,1.51633,64.1428,1.51825,63.9307,0.535322,-0.0024,
 ```
 
 Example using the supplied transcription without requiring complete ZMX setup:
@@ -263,8 +272,8 @@ There are no runtime dependencies; development tools are declared in
 - `optics_prescription_matcher/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
-- `catalogs/REFERENCE_CATALOG.csv`: maintained reference-catalogue CSV export;
-  its revised schema becomes executable input in R1.
+- `catalogs/REFERENCE_CATALOG.csv`: maintained, executable reference-catalogue
+  CSV export using the revised schema.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
 - `samples/sample_lens_data.csv`: worked, multi-section prescription CSV.
 - `samples/EF-M 22mm F2 STM.ZMX` and `samples/14-24mm F2.8 DG DN Art.ZMX`: original

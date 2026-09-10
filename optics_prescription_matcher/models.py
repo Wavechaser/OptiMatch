@@ -102,6 +102,9 @@ class CatalogGlass:
     vd: str
     pgf: str | None = None
     dpgf: str | None = None
+    ne: str | None = None
+    ve: str | None = None
+    precision_molding: bool | None = None
 
     @property
     def nd_value(self) -> Decimal:

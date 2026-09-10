@@ -19,7 +19,7 @@ Accept future OCR results through the same structured input contract.
 | ID | Outcome | Dependency | Acceptance gate | Status |
 | --- | --- | --- | --- | --- |
 | R0 | Organize the revised catalogue and record active policy | — | Data-only migration audit and baseline checks | Complete |
-| R1 | Accept the revised catalogue schema and scoped typecode normalization | R0 | Loader and compatibility tests | Pending |
+| R1 | Accept the revised catalogue schema and scoped typecode normalization | R0 | Loader and compatibility tests | Complete |
 | R2 | Add profiles, PgF conversion, and asphere-driven molding preference | R1 | Boundary, ownership, and ranking tests | Pending |
 | R3 | Emit and validate model-glass fallbacks | R2 | Integrated CLI and OpticStudio checks | Pending |
 
@@ -97,6 +97,18 @@ model serialization contract. OCR, e-line matching, optimization, and a general
 ZMX reader are non-goals for this delivery.
 
 ## Completed C1–C3 baseline record
+
+R1 execution boundary (base `70d45ac`): change only catalogue records/loading,
+supplied-name lookup normalization, their input/matching tests, and the catalogue
+sections of active docs. Preserve positional constructor compatibility, optical
+strings, legacy six-column inputs, exact-name lookup precedence, and exporter
+token safety. No new ranking or model-export behavior in R1. Gate: both shipped
+catalogues load, aliases and normalization collisions are tested, complete suite
+and Ruff pass, and fresh review approves before `feat(catalog): accept revised
+reference catalog schema`. Stop on unexpected data changes or scope expansion.
+R1 completed with 122 passing tests, Ruff lint/format, pip check, and diff checks.
+Fresh review confirmed parser rejection, legacy blank rows, scoped canonicalization,
+and source/report preservation. Both shipped catalogues load; no input data changed.
 
 The remaining sections preserve the original implemented proposal and evidence.
 Where its earlier matching or unmatched-material policy differs, the current

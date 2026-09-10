@@ -24,6 +24,9 @@ the materials or tolerances of production lenses.
 - Distinguish confirmed airspaces from unknown material data. Missing or unreadable
   information must not silently become air, zero, or a fabricated coefficient.
 - Use a CSV export of the user's maintained Excel glass lookup table.
+- Accept the canonical catalogue columns `Manufacturer`, `Typecode`, `nd`, `vd`,
+  `PgF`, and `dPgF`, plus optional `ne`, `ve`, and `PrecisionMolding`; retain
+  historical partial-dispersion header aliases for existing six-column exports.
 - Make missing information and study assumptions visible. Request necessary
   information when a usable model cannot otherwise be produced.
 
@@ -31,6 +34,10 @@ the materials or tolerances of production lenses.
 
 - Preserve explicitly supplied material typecodes; report any that cannot be
   resolved for export.
+- Normalize whitespace in Ohara typecodes for catalogue identity and supplied-name
+  lookup, while preserving non-Ohara internal spaces. Exact supplied-name matches
+  take precedence, and whitespace fallback never assigns an arbitrary name to
+  Ohara.
 - Consider close candidates with absolute differences strictly below `0.0002`
   in nd and `0.1` in Vd. Do not apply offsets to close substitutes.
 - Default to Ohara, then Hoya, then Hikari, then other catalogues. A selected

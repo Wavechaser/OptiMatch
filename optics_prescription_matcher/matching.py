@@ -293,15 +293,23 @@ def match_prescription(
                 )
             )
         elif surface.material is not None:
-            named = [
+            exact = [
                 g
                 for g in glasses
                 if g.typecode.casefold() == surface.material.casefold()
+            ]
+            normalized_material = "".join(surface.material.split()).casefold()
+            named = exact or [
+                g
+                for g in glasses
+                if g.manufacturer.casefold() == "ohara"
+                and "".join(g.typecode.split()).casefold() == normalized_material
             ]
             ranked = sorted(
                 named, key=lambda g: (_manufacturer_rank(g, policy), _identity(g))
             )
             chosen = ranked[0] if ranked else None
+            normalized_ohara_match = chosen is not None and not exact
             conflicting = len({(g.nd, g.vd, g.pgf, g.dpgf) for g in named}) > 1
             matches.append(
                 Match(
@@ -314,7 +322,9 @@ def match_prescription(
                     chosen.manufacturer if chosen else None,
                     chosen.typecode if chosen else surface.material,
                     reason=(
-                        "supplied typecode resolved by profile"
+                        "supplied typecode resolved by Ohara whitespace normalization"
+                        if normalized_ohara_match
+                        else "supplied typecode resolved by profile"
                         if chosen
                         else "supplied typecode preserved; host lookup unverified"
                     ),
@@ -347,7 +357,11 @@ def match_prescription(
                     ),
                 )
             )
-            surfaces.append(surface)
+            surfaces.append(
+                replace(surface, material=chosen.typecode)
+                if normalized_ohara_match
+                else surface
+            )
         else:
             updated, match = _match_numeric(surface, glasses, policy)
             surfaces.append(updated)

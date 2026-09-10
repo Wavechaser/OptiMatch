@@ -173,6 +173,32 @@ def test_unknown_and_conflicting_supplied_typecodes_are_preserved():
     assert result.matches[0].selected["catalogue_dpgf"] is None
 
 
+def test_supplied_name_uses_exact_match_before_ohara_whitespace_lookup():
+    supplied = Surface("1", "10", "2", material="S FPL 51")
+    catalogue = [
+        glass("S FPL 51", "1.5", "60", "Hoya"),
+        glass("S-FPL51", "1.6", "50", "Ohara"),
+    ]
+    result = match_prescription(prescription(supplied), catalogue)
+    assert result.matches[0].selected_manufacturer == "Hoya"
+    assert result.prescription.surfaces[0].material == "S FPL 51"
+
+
+def test_supplied_name_normalizes_whitespace_only_for_ohara():
+    supplied = Surface("1", "10", "2", material="S - FPL 51")
+    ohara = match_prescription(
+        prescription(supplied), [glass("S-FPL51", "1.5", "60", "Ohara")]
+    )
+    assert ohara.matches[0].original_material == "S - FPL 51"
+    assert ohara.matches[0].selected_typecode == "S-FPL51"
+    assert ohara.prescription.surfaces[0].material == "S-FPL51"
+    non_ohara = match_prescription(
+        prescription(supplied), [glass("S-FPL51", "1.5", "60", "Hoya")]
+    )
+    assert non_ohara.matches[0].selected_manufacturer is None
+    assert non_ohara.prescription.surfaces[0].material == "S - FPL 51"
+
+
 @pytest.mark.parametrize(
     ("nd", "vd", "catalogue"),
     [

@@ -110,6 +110,127 @@ def test_catalogue_loads_sample_and_preserves_precision():
     assert records[-1].dpgf == "0.055200"
 
 
+def test_revised_catalogue_loads_all_rows_and_retains_optional_fields():
+    records = load_catalog_csv(ROOT / "catalogs" / "REFERENCE_CATALOG.csv")
+    assert len(records) == 1186
+    assert records[0].typecode == "S-FPL51"
+    assert records[0].ne == "1.49845"
+    assert records[0].ve == "81.1526"
+    assert records[0].precision_molding is None
+
+
+def test_catalogue_accepts_canonical_and_legacy_dispersion_headers(tmp_path):
+    canonical = tmp_path / "canonical.csv"
+    canonical.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF,ne,ve,PrecisionMolding\n"
+        "Ohara,S - FPL 51,1.49700,81.5468,0.537497,0.0280,1.49845,81.1526,1\n"
+        "Hoya,N B K,1.5,60,,,,,0\n",
+        encoding="utf-8",
+    )
+    records = load_catalog_csv(canonical)
+    assert records[0].typecode == "S-FPL51"
+    assert records[0].precision_molding is True
+    assert records[1].typecode == "N B K"
+    assert records[1].precision_molding is False
+
+
+def test_catalogue_ignores_empty_rows(tmp_path):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF\n\nOhara,X,1.5,60,,\n",
+        encoding="utf-8",
+    )
+    assert len(load_catalog_csv(path)) == 1
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        ("Manufacturer,Typecode,nd,vd,PgF,dPgF,Extra", "catalogue header"),
+        (
+            'Manufacturer,Typecode,nd,vd,PgF,"P_g,F",dPgF',
+            "alias-colliding",
+        ),
+    ],
+)
+def test_catalogue_rejects_unknown_and_alias_colliding_headers(
+    tmp_path, headers, message
+):
+    path = tmp_path / "catalog.csv"
+    path.write_text(headers + "\n", encoding="utf-8")
+    with pytest.raises(InputError, match=message):
+        load_catalog_csv(path)
+
+
+@pytest.mark.parametrize(
+    ("ne", "ve", "molding", "message"),
+    [
+        ("1.5", "", "", "ne and ve"),
+        ("", "60", "", "ne and ve"),
+        ("-1", "60", "", "ne and ve must be positive"),
+        ("1.5", "60", "yes", "PrecisionMolding"),
+    ],
+)
+def test_catalogue_validates_optional_e_line_and_molding_values(
+    tmp_path, ne, ve, molding, message
+):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF,ne,ve,PrecisionMolding\n"
+        f"Ohara,X,1.5,60,,,{ne},{ve},{molding}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(InputError, match=message):
+        load_catalog_csv(path)
+
+
+def test_ohara_normalization_participates_in_duplicate_detection(tmp_path):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF\n"
+        "Ohara,S - FPL 51,1.5,60,,\n"
+        "Ohara,S-FPL51,1.6,50,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(InputError, match="catalogue row 3.*duplicate"):
+        load_catalog_csv(path)
+
+
+def test_catalogue_optional_fields_default_to_none(tmp_path):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF\nHoya,N B K,1.5,60,,\n",
+        encoding="utf-8",
+    )
+    record = load_catalog_csv(path)[0]
+    assert (record.ne, record.ve, record.precision_molding) == (None, None, None)
+
+
+@pytest.mark.parametrize(
+    ("manufacturer", "typecode"),
+    [("Ho\tya", "X"), ("Hoya", "N\tBK")],
+)
+def test_catalogue_rejects_controls_outside_ohara_whitespace_normalization(
+    tmp_path, manufacturer, typecode
+):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        f"Manufacturer,Typecode,nd,vd,PgF,dPgF\n{manufacturer},{typecode},1.5,60,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(InputError, match="control characters"):
+        load_catalog_csv(path)
+
+
+def test_ohara_removes_control_whitespace_before_identifier_validation(tmp_path):
+    path = tmp_path / "catalog.csv"
+    path.write_text(
+        "Manufacturer,Typecode,nd,vd,PgF,dPgF\nOhara,S\t-FPL 51,1.5,60,,\n",
+        encoding="utf-8",
+    )
+    assert load_catalog_csv(path)[0].typecode == "S-FPL51"
+
+
 def test_catalogue_rejects_duplicate_identity(tmp_path):
     path = tmp_path / "catalog.csv"
     path.write_text(

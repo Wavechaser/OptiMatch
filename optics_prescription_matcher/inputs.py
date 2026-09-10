@@ -463,7 +463,15 @@ def load_prescription_json(path: str | Path) -> Prescription:
     return prescription_from_dict(data)
 
 
-_CATALOG_HEADERS = {"Manufacturer", "Typecode", "nd", "vd", "P_g,F", "d_Pg,F"}
+_CATALOG_REQUIRED_HEADERS = {"Manufacturer", "Typecode", "nd", "vd", "PgF", "dPgF"}
+_CATALOG_OPTIONAL_HEADERS = {"ne", "ve", "PrecisionMolding"}
+_CATALOG_HEADER_ALIASES = {"P_g,F": "PgF", "d_Pg,F": "dPgF"}
+
+
+def _catalog_typecode(value: Any, manufacturer: str, context: str) -> str:
+    if manufacturer.casefold() == "ohara" and isinstance(value, str):
+        value = "".join(value.split())
+    return _identifier(value, context)
 
 
 def load_catalog_csv(path: str | Path) -> tuple[CatalogGlass, ...]:
@@ -472,27 +480,36 @@ def load_catalog_csv(path: str | Path) -> tuple[CatalogGlass, ...]:
     except OSError as exc:
         raise InputError(f"catalogue: {exc}") from exc
     with stream:
-        reader = csv.DictReader(stream)
-        if (
-            reader.fieldnames is None
-            or len(reader.fieldnames) != len(set(reader.fieldnames))
-            or set(reader.fieldnames) != _CATALOG_HEADERS
-        ):
-            raise InputError(f"catalogue header: expected {sorted(_CATALOG_HEADERS)}")
+        reader = csv.reader(stream)
+        try:
+            source_headers = next(reader)
+        except StopIteration:
+            raise InputError("catalogue header: missing") from None
+        headers = [_CATALOG_HEADER_ALIASES.get(name, name) for name in source_headers]
+        allowed = _CATALOG_REQUIRED_HEADERS | _CATALOG_OPTIONAL_HEADERS
+        if len(headers) != len(set(headers)):
+            raise InputError("catalogue header: duplicate or alias-colliding header")
+        if not _CATALOG_REQUIRED_HEADERS <= set(headers) or not set(headers) <= allowed:
+            raise InputError(
+                "catalogue header: expected required fields "
+                f"{sorted(_CATALOG_REQUIRED_HEADERS)} and optional fields "
+                f"{sorted(_CATALOG_OPTIONAL_HEADERS)}"
+            )
         records: list[CatalogGlass] = []
         identities: set[tuple[str, str]] = set()
-        for row_number, row in enumerate(reader, 2):
+        for row_number, values in enumerate(reader, 2):
+            if not values:
+                continue
             context = f"catalogue row {row_number}"
-            if None in row or any(row.get(name) is None for name in _CATALOG_HEADERS):
+            if len(values) != len(headers):
                 raise _error(context, "row has the wrong number of columns")
+            row = dict(zip(headers, values, strict=True))
             manufacturer = _identifier(
                 row["Manufacturer"], f"{context} field Manufacturer"
             )
-            typecode = _identifier(row["Typecode"], f"{context} field Typecode")
-            if any(char.isspace() for char in typecode):
-                raise _error(f"{context} field Typecode", "must be a single token")
-            if not manufacturer or not typecode:
-                raise _error(context, "Manufacturer and Typecode are required")
+            typecode = _catalog_typecode(
+                row["Typecode"], manufacturer, f"{context} field Typecode"
+            )
             identity = (manufacturer.casefold(), typecode.casefold())
             if identity in identities:
                 raise _error(context, "duplicate catalogue identity")
@@ -501,13 +518,30 @@ def load_catalog_csv(path: str | Path) -> tuple[CatalogGlass, ...]:
             vd = _quantity(row["vd"], f"{context} field vd")
             if Decimal(nd) <= 0 or Decimal(vd) <= 0:
                 raise _error(context, "nd and vd must be positive")
-            pgf = row["P_g,F"].strip() or None
-            dpgf = row["d_Pg,F"].strip() or None
+            pgf = row["PgF"].strip() or None
+            dpgf = row["dPgF"].strip() or None
             if pgf is not None:
-                pgf = _quantity(pgf, f"{context} field P_g,F")
+                pgf = _quantity(pgf, f"{context} field PgF")
             if dpgf is not None:
-                dpgf = _quantity(dpgf, f"{context} field d_Pg,F")
-            records.append(CatalogGlass(manufacturer, typecode, nd, vd, pgf, dpgf))
+                dpgf = _quantity(dpgf, f"{context} field dPgF")
+            ne = row.get("ne", "").strip() or None
+            ve = row.get("ve", "").strip() or None
+            if (ne is None) != (ve is None):
+                raise _error(context, "ne and ve must be supplied together")
+            if ne is not None:
+                ne = _quantity(ne, f"{context} field ne")
+                ve = _quantity(ve, f"{context} field ve")
+                if Decimal(ne) <= 0 or Decimal(ve) <= 0:
+                    raise _error(context, "ne and ve must be positive")
+            molding_text = row.get("PrecisionMolding", "").strip()
+            if molding_text not in {"", "0", "1"}:
+                raise _error(
+                    f"{context} field PrecisionMolding", "must be 1, 0, or blank"
+                )
+            molding = None if not molding_text else molding_text == "1"
+            records.append(
+                CatalogGlass(manufacturer, typecode, nd, vd, pgf, dpgf, ne, ve, molding)
+            )
     return tuple(records)
 
 
