@@ -187,6 +187,50 @@ Inference eligibility and handling of rounded sums belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Never put an independently
 driven `THIC` value and a thickness solve on the same dependent surface.
 
+## Export-only rear dummy
+
+When an accepted rear `TCOM`/`TOLE` controls the air gap after the last powered
+refractive group, the exporter may insert a plane, no-material dummy after that
+rear boundary. Let the evaluated gap in configuration *i* be `G_i` and let `u`
+be 1 mm in prescription units. The original boundary retains the transformed
+solve-controlled thickness `G_i - R`; the dummy receives fixed `R`, where
+`R = min(G_i) - u`. Thus each minimum-gap configuration has exactly `u` before
+the dummy while changing the post-dummy thickness does not affect the solve.
+
+The scan includes curved/aspheric boundaries and planar rear faces of cemented
+groups, but ignores later plane-parallel coverglass groups. A direct `TCOM` or
+`TOLE` remains attached to the original rear boundary with its total reduced by
+`R`. A downstream `TOLE` may relocate only when its excluded downstream span is
+invariant; downstream complementary solves and coupled constraints are reported
+as unsupported and left unchanged. Negative `R` is retained with a warning.
+The export report records source/export maps, original and transformed solves,
+per-configuration evaluated and split gaps, minimum configurations, and warnings.
+
+OpticStudio 2023 R1.00 load/save/reload and perturbation controls, 2026-09-11:
+
+| Control | Solve-controlled gaps after split (`G_i - R`) | Fixed remainder | Verified constraint |
+| --- | --- | --- | --- |
+| Direct rear compensator | 3 / 1 mm | 5 mm | TCOM reference 2, dependent 4, total 5 |
+| Position solve relocated across coverglass | 3 / 1 mm | 5 mm | TOLE reference 2, dependent 4, total 7 |
+| Two independent inferred pairs with fisheye setup | 1 / 7.4 mm | 1.15 mm | TCOM 2→4 total 18.12; TCOM 6→8 total 9.65 |
+
+All original surface coordinates were checked against independently calculated
+source coordinates in both configurations, before and after save/reload. Adding
+0.25 mm to the fixed remainder left the solve-controlled gap and all upstream
+positions unchanged and shifted only downstream positions by 0.25 mm. The value
+was restored without saving the perturbation. The combined control also retained
+the six fisheye angles and the exact 16-row compact MCE layout. These are synthetic
+serialization/geometry controls, not claims about optical performance at 89°.
+
+Evidence is retained locally in ignored
+`output/f4_oracle_{tcom,tole,combined}.host_evidence.json` and
+`output/final_combined_export_host.json`; source/oracle fixtures and standalone
+validation scripts are alongside them. A final check compared current-renderer
+ZMX bytes and source-preserving CSV with those tested artifacts. ZOS-API reports
+a plane's `Radius` as positive infinity, while ZMX emits `CURV 0`; validators must
+not confuse the two representations. See COMMANDLINE for the required Windows
+PowerShell/runtime and standalone-application lifecycle.
+
 ## Multiple configurations
 
 Both samples have `MNUM 3 1`: three configurations and active configuration 1.
@@ -233,6 +277,12 @@ created. **ZOS-API MCE `Param1` is zero-based for these field operands**, unlike
 their one-based ZMX field number. A control set the API row with Param1=1 to
 0.123 and verified that only system field 2's VCY changed, then restored zero.
 Do not mistake this API indexing difference for a serialization defect.
+
+The companion fisheye control loaded, saved, and reloaded with six angle fields
+`0, 18, 36, 54, 72, 89`, blank single-configuration `LTTL`, two `MOFF` operands,
+and paired fields 2–6 vignetting operands (13 MCE operands total). A temporary
+field-2 y-vignetting perturbation was observed and restored; evidence is the
+ignored `output/fisheye_host_evidence.json`.
 
 Create `FVCY`/`FVDY` entries with numeric zero for applicable field/configuration
 slots, excluding every numerically zero field: this representation of the user's

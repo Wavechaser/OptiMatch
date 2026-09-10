@@ -2,6 +2,7 @@
 
 Status: C1, C2, and C3 implemented and independently reviewed, 2026-09-10.
 The R0–R3 catalogue and matching-policy delivery is complete, 2026-09-11.
+The F1–F4 export-refinement delivery is complete and host-verified, 2026-09-11.
 This plan applies the plan-work structure with small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
@@ -27,7 +28,7 @@ review before each task-authorized commit. Samples and catalogue are protected.
 | F1 | Typed fisheye preset, CLI and metadata | — | Units, precedence, header and CLI tests | Complete |
 | F2 | Compact ordered multi-configuration operands | — | Operand sequence tests and host inspection | Complete |
 | F3 | Independent solves survive redundant constant spans | — | Two-pair regression and genuine ambiguity tests | Complete |
-| F4 | Export-only rear dummy separates movement and back focus | F3 | Coordinates, equations, mapping and host evidence | Pending |
+| F4 | Export-only rear dummy separates movement and back focus | F3 | Coordinates, equations, mapping and host evidence | Complete |
 
 F1 adds angle fields 0, 18, 36, 54, 72, 89 degrees without length scaling.
 Explicit compatible fields retain precedence; explicit incompatible field types
@@ -102,10 +103,37 @@ bounded recomputation removes that influence. Reviewer approved the correction.
 Ruff, pip and diff checks pass. F3 is the commit titled `fix(solves): retain
 independent compensator relationships`.
 
-Resumption: F1/F2/F3 complete; F4 pending. Baseline command used
-`-m pytest -q -p no:cacheprovider --basetemp output/pytest_fixes_baseline` (162 pass).
-Next: F4 implementation and final combined host checks. Shared plan edits belong
-to the orchestrator; product edits are serialized. No unresolved scope decision.
+F4 evidence: 63 focused exporter/rear-contract and 199 full tests pass. Independent
+review approved after preserving no-dummy rounded serialization and adding emitted
+DISZ/THIC/TCOM/TOLE geometry checks. Terminating-unit sums are exact; inch conversion
+allows only a 1e-25 residual for recurring 1/25.4 at Decimal precision. Tests cover
+model glass, rounded inferred insertion, direct/downstream TOLE, coupled and varying
+span skips, cemented planar rear faces, zero-base aspheres, negative remainders,
+configuration minima/ties, ID collision and stop/asphere remapping.
+
+Three independent OpticStudio controls each passed both configurations, save/reload,
+source-coordinate comparisons and a +0.25 mm post-dummy-only adjustment. Evidence:
+`output/f4_oracle_{tcom,tole,combined}.host_evidence.json`. The combined inferred-pair
+fisheye control also passed exact field/MCE checks in
+`output/final_combined_export_host.json`. `output/check_fixes_artifacts.py` confirmed
+the current renderer matches the host-tested ZMX bytes and source-preserving CSV.
+No optical-performance claim is inferred from these geometry controls. Unsupported
+coupled/relocation cases are reported and left unsplit; no new solve families,
+matching rules or input schema were introduced.
+
+Delivery identities: F1 `1dac687`, F2 `770aeb1`, F3 `acb5d86`; F4 is the commit
+containing this record, titled `feat(export): decouple rear solves with a dummy
+surface`. All were integrated directly into main with exact-path staging, no
+extra checkout/branch and no push. User-approved agent reuse kept builders and
+reviewers separate after the fresh-agent thread limit. Samples and catalogue
+remain unchanged from baseline `d328957`; generated evidence remains ignored.
+
+Resumption: F1–F4 complete, no unresolved findings or pending implementation.
+Established checks: `.venv/Scripts/python.exe -m pytest`, `-m ruff check .`,
+`-m ruff format --check .`, `-m pip check`, and `git diff --check`. Native host
+instructions and known failure signatures are in COMMANDLINE with an AGENTS
+pointer. Preserve source samples/catalogue and unrelated output artifacts; stop
+for review if future host evidence contradicts recorded serialization semantics.
 
 ### Previous catalogue delivery
 

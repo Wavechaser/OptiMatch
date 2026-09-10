@@ -3,15 +3,15 @@
 import csv
 import io
 import json
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import TextIO
 
 from .inputs import decimal_value
-from .matching import MatchingResult, pgf_to_dpgf
-from .models import Asphere, Prescription, SystemSettings, Wavelength
-from .solves import resolve_solves
+from .matching import Match, MatchingResult, pgf_to_dpgf
+from .models import Asphere, Prescription, Surface, SystemSettings, Wavelength
+from .solves import ResolvedSolve, SolveResult, resolve_solves
 
 
 def _write_csv(prescription: Prescription, stream: TextIO) -> None:
@@ -248,6 +248,238 @@ def _mce_values_vary(values: tuple[str, ...]) -> bool:
     return len({Decimal(value) for value in values}) > 1
 
 
+@dataclass(frozen=True)
+class _ExportModel:
+    surfaces: tuple[Surface, ...]
+    values: tuple[dict[str, str], ...]
+    solves: tuple[ResolvedSolve, ...]
+    rear_dummy: dict[str, object]
+
+
+def _refractive(surface: Surface, matches: dict[str, Match]) -> bool:
+    if surface.material is not None:
+        return True
+    match = matches.get(surface.source_id)
+    return match is not None and match.status == "model"
+
+
+def _has_power(surface: Surface, aspheres: dict[str, Asphere]) -> bool:
+    if Decimal(surface.radius) != 0:
+        return True
+    asphere = aspheres.get(surface.source_id)
+    return asphere is not None and any(
+        Decimal(value) != 0 for value in asphere.coefficients.values()
+    )
+
+
+def _last_powered_rear_boundary(
+    surfaces: tuple[Surface, ...],
+    aspheres: dict[str, Asphere],
+    matches: dict[str, Match],
+) -> str | None:
+    last: str | None = None
+    index = 1
+    while index < len(surfaces) - 1:
+        if not _refractive(surfaces[index], matches):
+            index += 1
+            continue
+        start = index
+        while index < len(surfaces) - 1 and _refractive(surfaces[index], matches):
+            index += 1
+        rear = index
+        if any(_has_power(surface, aspheres) for surface in surfaces[start : rear + 1]):
+            last = surfaces[rear].source_id
+    return last
+
+
+def _solve_terms(
+    solve: ResolvedSolve, surfaces: tuple[Surface, ...]
+) -> tuple[str, ...]:
+    ids = [surface.source_id for surface in surfaces]
+    start = ids.index(solve.reference_surface_id)
+    end = ids.index(solve.surface_id)
+    if solve.kind == "complementary_gap":
+        return (solve.reference_surface_id, solve.surface_id)
+    return tuple(ids[start : end + 1])
+
+
+def _evaluated_solve_values(
+    source: SolveResult, surfaces: tuple[Surface, ...]
+) -> tuple[dict[str, str], ...]:
+    values = tuple(dict(item) for item in source.values)
+    order = {surface.source_id: index for index, surface in enumerate(surfaces)}
+    for solve in sorted(source.solves, key=lambda item: order[item.surface_id]):
+        terms = _solve_terms(solve, surfaces)
+        for configuration in values:
+            configuration[solve.surface_id] = str(
+                Decimal(solve.total)
+                - sum(
+                    (
+                        Decimal(configuration[item])
+                        for item in terms
+                        if item != solve.surface_id
+                    ),
+                    Decimal(),
+                )
+            )
+    return values
+
+
+def _dummy_id(surfaces: tuple[Surface, ...]) -> str:
+    used = {surface.source_id for surface in surfaces}
+    index = 1
+    while f"__OPTIMATCH_DUMMY_{index}" in used:
+        index += 1
+    return f"__OPTIMATCH_DUMMY_{index}"
+
+
+def _rear_dummy_export(
+    prescription: Prescription,
+    source: SolveResult,
+    aspheres: dict[str, Asphere],
+    matches: dict[str, Match],
+) -> _ExportModel:
+    surfaces = prescription.surfaces
+    values = _evaluated_solve_values(source, surfaces)
+    rear = _last_powered_rear_boundary(surfaces, aspheres, matches)
+    base = {
+        "status": "not_inserted",
+        "source_solves": [asdict(item) for item in source.solves],
+    }
+    if rear is None:
+        return _ExportModel(
+            surfaces,
+            source.values,
+            source.solves,
+            base | {"reason": "no powered group"},
+        )
+    order = {surface.source_id: index for index, surface in enumerate(surfaces)}
+    rear_index = order[rear]
+    candidates = [item for item in source.solves if item.surface_id == rear]
+    downstream = [
+        item
+        for item in source.solves
+        if item.kind == "constant_span"
+        and order[item.surface_id] > rear_index
+        and order[item.reference_surface_id] < rear_index
+    ]
+    unsupported_downstream = [
+        item
+        for item in source.solves
+        if item.kind == "complementary_gap"
+        and order[item.surface_id] > rear_index
+        and order[item.reference_surface_id] < rear_index
+    ]
+    candidate = candidates[0] if candidates else (downstream[0] if downstream else None)
+    if candidate is None:
+        reason = (
+            "downstream complementary solve cannot relocate"
+            if unsupported_downstream
+            else "no eligible rear solve"
+        )
+        return _ExportModel(
+            surfaces,
+            source.values,
+            source.solves,
+            base | {"reason": reason, "rear_boundary": rear},
+        )
+    if len(candidates) + len(downstream) != 1:
+        return _ExportModel(
+            surfaces,
+            source.values,
+            source.solves,
+            base | {"reason": "multiple rear solve candidates", "rear_boundary": rear},
+        )
+    candidate_terms = set(_solve_terms(candidate, surfaces))
+    for solve in source.solves:
+        if solve == candidate:
+            continue
+        if candidate_terms & set(_solve_terms(solve, surfaces)):
+            return _ExportModel(
+                surfaces,
+                source.values,
+                source.solves,
+                base | {"reason": "coupled solve interaction", "rear_boundary": rear},
+            )
+    excluded = Decimal()
+    if candidate.surface_id != rear:
+        excluded_values = [
+            sum(
+                (
+                    Decimal(config[item])
+                    for item in _solve_terms(candidate, surfaces)
+                    if order[item] > rear_index
+                ),
+                Decimal(),
+            )
+            for config in values
+        ]
+        if len(set(excluded_values)) != 1:
+            return _ExportModel(
+                surfaces,
+                source.values,
+                source.solves,
+                base | {"reason": "downstream TOLE span varies", "rear_boundary": rear},
+            )
+        excluded = excluded_values[0]
+    gaps = [Decimal(config[rear]) for config in values]
+    millimetres_per_unit = {"mm": "1", "cm": "10", "m": "1000", "in": "25.4"}
+    remainder = min(gaps) - Decimal("1") / Decimal(
+        millimetres_per_unit[prescription.units]
+    )
+    dummy = _dummy_id(surfaces)
+    for config, gap in zip(values, gaps, strict=True):
+        config[rear] = str(gap - remainder)
+        config[dummy] = str(remainder)
+    total = Decimal(candidate.total) - excluded - remainder
+    transformed = ResolvedSolve(
+        candidate.kind, rear, candidate.reference_surface_id, str(total)
+    )
+    transformed_solves = tuple(
+        transformed if solve == candidate else solve for solve in source.solves
+    )
+    export_surfaces = (
+        *surfaces[: rear_index + 1],
+        Surface(dummy, "0", str(remainder)),
+        *surfaces[rear_index + 1 :],
+    )
+    warnings = []
+    if remainder < 0:
+        warnings.append("rear dummy remainder is negative; exported without clamping")
+    minimum = [index + 1 for index, gap in enumerate(gaps) if gap == min(gaps)]
+    configuration_names = (
+        [item.name for item in prescription.configurations]
+        if prescription.configurations
+        else ["base"]
+    )
+    return _ExportModel(
+        export_surfaces,
+        values,
+        transformed_solves,
+        base
+        | {
+            "status": "inserted",
+            "dummy_surface_id": dummy,
+            "rear_boundary": rear,
+            "minimum_configurations": minimum,
+            "fixed_remainder": str(remainder),
+            "configurations": [
+                {
+                    "index": index,
+                    "name": name,
+                    "evaluated_original_gap": str(gap),
+                    "solved_gap": str(gap - remainder),
+                }
+                for index, (name, gap) in enumerate(
+                    zip(configuration_names, gaps, strict=True), 1
+                )
+            ],
+            "transformed_solve": asdict(transformed),
+            "warnings": warnings,
+        },
+    )
+
+
 def _safe_token(text: str, context: str) -> str:
     if not text or any(
         char.isspace() or char in {'"', "'"} or ord(char) < 32 or ord(char) == 127
@@ -383,10 +615,15 @@ def render_zmx(
     """Validate and render one narrowly supported sequential ZMX study model."""
     system, setup = _setup(result.prescription, field_preset)
     prescription = replace(result.prescription, system=system)
-    ids, stop = _validate_zmx(replace(result, prescription=prescription))
+    source_ids, stop = _validate_zmx(replace(result, prescription=prescription))
     solves = resolve_solves(prescription)
     aspheres = {item.surface_id: item for item in prescription.aspheres}
     matches = {item.surface_id: item for item in result.matches}
+    export = _rear_dummy_export(prescription, solves, aspheres, matches)
+    surfaces = export.surfaces
+    export_values = export.values
+    export_solves = export.solves
+    ids = {surface.source_id: index for index, surface in enumerate(surfaces)}
     lines = [
         "VERS 221221 730 20120530 20120530",
         "MODE SEQ",
@@ -410,8 +647,8 @@ def render_zmx(
     lines.append(f"PWAV {primary}")
     for key in ("VDXN", "VDYN", "VCXN", "VCYN"):
         lines.append(f"{key} " + " ".join("0" for _ in system.fields))
-    dependent = {item.surface_id: item for item in solves.solves}
-    for index, surface in enumerate(prescription.surfaces):
+    dependent = {item.surface_id: item for item in export_solves}
+    for index, surface in enumerate(surfaces):
         lines.append(f"SURF {index}")
         lines.extend(
             _asphere_lines(aspheres[surface.source_id])
@@ -419,11 +656,9 @@ def render_zmx(
             else ["  TYPE STANDARD"]
         )
         lines.append(f"  CURV {_curvature(surface.radius)}")
-        thickness = (
-            "0" if index == len(prescription.surfaces) - 1 else surface.thickness
-        )
-        if solves.values and index < len(prescription.surfaces) - 1:
-            thickness = solves.values[0][surface.source_id]
+        thickness = "0" if index == len(surfaces) - 1 else surface.thickness
+        if export_values and index < len(surfaces) - 1:
+            thickness = export_values[0][surface.source_id]
         if thickness.casefold() in {"infinity", "∞"}:
             thickness = "INFINITY"
         lines.append(f"  DISZ {thickness}")
@@ -492,18 +727,18 @@ def render_zmx(
     ]
     if configurations:
         object_values = tuple(
-            _mce_thickness(values[prescription.surfaces[0].source_id])
-            for values in solves.values
+            _mce_thickness(configuration[surfaces[0].source_id])
+            for configuration in export_values
         )
         if _mce_values_vary(object_values):
             sections.append(_mce_records("THIC", 0, object_values, _MCE_TAIL))
         thickness_records: list[str] = []
-        for surface in prescription.surfaces[1:-1]:
+        for surface in surfaces[1:-1]:
             if surface.source_id in dependent:
                 continue
             values = tuple(
                 _mce_thickness(configuration[surface.source_id])
-                for configuration in solves.values
+                for configuration in export_values
             )
             if _mce_values_vary(values):
                 thickness_records.extend(
@@ -543,11 +778,13 @@ def render_zmx(
         setup["warnings"].append(
             "Zero f-number is an incomplete setup placeholder; set an aperture before optical analysis."
         )
+    setup["warnings"].extend(export.rear_dummy.get("warnings", []))
     report = {
         "zmx": {
             "status": "rendered",
             "host_validation": "unverified for this output",
             "surface_map": ids,
+            "source_surface_map": source_ids,
             "setup": setup,
             "global_coordinate_reference": ids[stop],
             "ray_aiming_record": "0 1 1 1 0 0 0 0 0 1",
@@ -557,7 +794,9 @@ def render_zmx(
             ),
             "configuration_infinity_representation": "1e10",
             "solves": [asdict(item) for item in solves.solves],
+            "export_solves": [asdict(item) for item in export_solves],
             "solve_diagnostics": list(solves.diagnostics),
+            "rear_dummy": export.rear_dummy,
         }
     }
     return ("\n".join(lines) + "\n").encode("utf-16"), report

@@ -116,6 +116,16 @@ paired off-axis `FVCY`/`FVDY` operands. Records are operand-major and use `MOFF`
 separators between nonempty sections; zero-valued axial fields, fixed distances,
 and solve-controlled distances do not enter the table.
 
+When an accepted rear thickness solve controls the air gap after the last powered
+group, ZMX export automatically inserts a plane, no-material dummy. The smallest
+evaluated rear gap has 1 mm before the dummy; movement remains in the
+solve-controlled gap before it, while the remainder behind it is fixed and
+independently adjustable. This is export-only: source CSV, source solve data, and
+source surface numbering remain unchanged. Coupled or unsupported layouts are
+left unchanged with a reported reason. Inspect `zmx.rear_dummy` for the split
+gaps, transformed solve, and warnings; `zmx.surface_map` and
+`zmx.source_surface_map` record the export and source surface maps.
+
 ### Setup defaults and field presets
 
 Add `--field-preset aps-c` to use a field preset, or set

@@ -101,6 +101,9 @@ the materials or tolerances of production lenses.
 - Keep ZMX multi-configuration tables compact: title, varying independent
   thicknesses, optional apertures, and paired off-axis vignetting operands;
   fixed and solve-controlled thicknesses stay in the base prescription.
+- Insert an export-only rear dummy when an eligible accepted rear solve needs
+  back-focus decoupling, retaining source geometry/solve data and reporting the
+  transformed export geometry, solve, and warnings.
 - Create eligible thickness compensator or position solves for stated or clearly
   supported constant-distance relationships. Accommodate source rounding where
   justified, disclose adjusted distances, and preserve explicit configuration

@@ -365,8 +365,192 @@ def test_base_only_explicit_dependent_renders_resolved_disz_not_symbol():
     )
     text = render_zmx(MatchingResult(prescription, matches))[0].decode("utf-16")
     assert "  DISZ INFINITY" in text
-    assert "  DISZ 10" in text
+    assert "  DISZ 1" in text
+    assert "  DISZ 9" in text
     assert "DISZ gap" not in text
+
+
+@pytest.mark.parametrize(
+    ("units", "reference", "gaps", "total"),
+    [
+        ("mm", ("2", "4", "4"), ("10", "8", "8"), "12"),
+        ("cm", (".2", ".4", ".4"), ("1", ".8", ".8"), "1.2"),
+        ("m", (".002", ".004", ".004"), (".010", ".008", ".008"), ".012"),
+        (
+            "in",
+            (".07874015748", ".15748031496", ".15748031496"),
+            (".3937007874", ".31496062992", ".31496062992"),
+            ".47244094488",
+        ),
+    ],
+)
+def test_rear_tcom_dummy_uses_minimum_gap_and_preserves_coordinates(
+    units, reference, gaps, total
+):
+    configurations = tuple(
+        Configuration(name, {"1": ref, "2": gap})
+        for name, ref, gap in zip(("far", "near", "tie"), reference, gaps, strict=True)
+    )
+    base = result(configurations=configurations)
+    prescription = replace(
+        base.prescription,
+        units=units,
+        solves=(Solve("complementary_gap", "2", "1", total),),
+    )
+    content, report = render_zmx(replace(base, prescription=prescription))
+    lines = content.decode("utf-16").splitlines()
+    dummy = report["zmx"]["rear_dummy"]
+    assert dummy["status"] == "inserted"
+    assert dummy["rear_boundary"] == "2"
+    assert dummy["minimum_configurations"] == [2, 3]
+    expected_remainder = min(map(Decimal, gaps)) - Decimal("1") / Decimal(
+        {"mm": "1", "cm": "10", "m": "1000", "in": "25.4"}[units]
+    )
+    assert Decimal(dummy["fixed_remainder"]) == expected_remainder
+    dummy_id = dummy["dummy_surface_id"]
+    assert report["zmx"]["surface_map"][dummy_id] == 3
+    assert report["zmx"]["source_surface_map"] == {"OBJ": 0, "1": 1, "2": 2, "IMG": 3}
+    transformed_total = Decimal(total) - expected_remainder
+    assert f"  TCOM 1 {transformed_total}" in lines
+    assert "SURF 3" in lines and any(
+        line.startswith("  DISZ ")
+        and Decimal(line.removeprefix("  DISZ ")) == expected_remainder
+        for line in lines
+    )
+
+
+def test_rear_downstream_tole_relocates_across_invariant_coverglass():
+    configurations = (
+        Configuration("far", {"1": "2", "2": "8", "3": "1", "4": "1"}),
+        Configuration("near", {"1": "4", "2": "6", "3": "1", "4": "1"}),
+    )
+    base = result(configurations=configurations)
+    surfaces = (
+        Surface("OBJ", "0", "infinity"),
+        Surface("1", "50", "2", material="S-BSL7", stop=True),
+        Surface("2", "-50", "8"),
+        Surface("3", "0", "1", material="S-BSL7"),
+        Surface("4", "0", "1"),
+        Surface("IMG", "0", ""),
+    )
+    prescription = replace(
+        base.prescription,
+        surfaces=surfaces,
+        solves=(Solve("constant_span", "4", "1", "12"),),
+    )
+    _, report = render_zmx(replace(base, prescription=prescription))
+    dummy = report["zmx"]["rear_dummy"]
+    assert dummy["status"] == "inserted"
+    assert dummy["rear_boundary"] == "2"
+    assert dummy["fixed_remainder"] == "5"
+    assert dummy["transformed_solve"] == {
+        "kind": "constant_span",
+        "surface_id": "2",
+        "reference_surface_id": "1",
+        "total": "5",
+    }
+
+
+def test_rear_dummy_skips_unsupported_downstream_complementary_solve():
+    base = result(
+        configurations=(
+            Configuration("far", {"1": "2", "2": "8", "3": "2"}),
+            Configuration("near", {"1": "4", "2": "6", "3": "0"}),
+        )
+    )
+    surfaces = (
+        *base.prescription.surfaces[:-1],
+        Surface("3", "0", "2"),
+        base.prescription.surfaces[-1],
+    )
+    prescription = replace(
+        base.prescription,
+        surfaces=surfaces,
+        solves=(Solve("complementary_gap", "3", "1", "4"),),
+    )
+    _, report = render_zmx(replace(base, prescription=prescription))
+    assert report["zmx"]["rear_dummy"]["status"] == "not_inserted"
+    assert "downstream complementary" in report["zmx"]["rear_dummy"]["reason"]
+
+
+def test_no_rear_dummy_keeps_unadjusted_rounded_inferred_thickness():
+    base = result()
+    surfaces = (
+        Surface("OBJ", "0", "infinity"),
+        Surface("1", "0", "a", stop=True),
+        Surface("2", "0", "b"),
+        Surface("IMG", "0", ""),
+    )
+    prescription = replace(
+        base.prescription,
+        surfaces=surfaces,
+        configurations=(
+            Configuration("one", {"a": "4.00", "b": "6.57"}),
+            Configuration("two", {"a": "2.00", "b": "8.58"}),
+            Configuration("three", {"a": "3.00", "b": "7.58"}),
+        ),
+        declared_symbols=("a", "b"),
+        source_precision_trusted=True,
+    )
+    text, report = render_zmx(replace(base, prescription=prescription))
+    assert report["zmx"]["rear_dummy"]["status"] == "not_inserted"
+    assert report["zmx"]["rear_dummy"]["reason"] == "no powered group"
+    assert "  DISZ 6.57\n" in text.decode("utf-16")
+
+
+def test_rear_dummy_handles_cemented_planar_group_asphere_and_coverglass():
+    base = result(
+        configurations=(
+            Configuration("far", {"2": "2", "3": "8"}),
+            Configuration("near", {"2": "4", "3": "6"}),
+        )
+    )
+    surfaces = (
+        Surface("OBJ", "0", "infinity"),
+        Surface("1", "0", "1", material="S-BSL7", stop=True),
+        Surface("2", "0", "2", material="S-LAH58"),
+        Surface("3", "0", "8"),
+        Surface("4", "0", "1", material="S-BSL7"),
+        Surface("5", "0", "1"),
+        Surface("IMG", "0", ""),
+    )
+    prescription = replace(
+        base.prescription,
+        surfaces=surfaces,
+        aspheres=(Asphere("3", "even", "0", {4: "1E-5"}),),
+        solves=(Solve("complementary_gap", "3", "2", "10"),),
+    )
+    _, report = render_zmx(replace(base, prescription=prescription))
+    dummy = report["zmx"]["rear_dummy"]
+    assert dummy["status"] == "inserted"
+    assert dummy["rear_boundary"] == "3"
+    assert report["zmx"]["surface_map"][dummy["dummy_surface_id"]] == 4
+    assert report["zmx"]["surface_map"]["4"] == 5
+
+
+def test_rear_dummy_reports_no_eligible_solve_and_negative_remainder():
+    base = result()
+    _, report = render_zmx(base)
+    assert report["zmx"]["rear_dummy"] == {
+        "status": "not_inserted",
+        "source_solves": [],
+        "reason": "no eligible rear solve",
+        "rear_boundary": "2",
+    }
+
+    configured = replace(
+        base,
+        prescription=replace(
+            base.prescription,
+            configurations=(Configuration("short", {"1": "1", "2": ".5"}),),
+            solves=(Solve("complementary_gap", "2", "1", "1.5"),),
+        ),
+    )
+    _, negative = render_zmx(configured)
+    dummy = negative["zmx"]["rear_dummy"]
+    assert dummy["fixed_remainder"] == "-0.5"
+    assert dummy["configurations"][0]["solved_gap"] == "1.0"
+    assert negative["zmx"]["setup"]["warnings"][-1].startswith("rear dummy")
 
 
 @pytest.mark.parametrize(
