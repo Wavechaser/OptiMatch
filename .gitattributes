@@ -1,0 +1,16 @@
+* text=auto
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+# Preserve reference CSV formatting and UTF-16 ZMX bytes as supplied.
+*.csv -text
+*.ZMX -text -diff
+*.zmx -text -diff
+# Original samples retain source whitespace and line endings, including Markdown.
+samples/** -text -whitespace

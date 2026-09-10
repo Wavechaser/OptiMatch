@@ -1,0 +1,22 @@
+# Local Python environment and tooling
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+build/
+dist/
+*.egg-info/
+
+# Local secrets and generated work
+.env
+.env.*
+!.env.example
+output/
+~$*
+Thumbs.db
+.DS_Store
