@@ -37,10 +37,10 @@ def glass(name, nd, vd, maker="Ohara", pgf=None, dpgf=None, molding=None):
         ("1.5002", "50", "offset"),
         ("1.5", "50.1", "offset"),
         ("1.51999", "51.999", "offset"),
-        ("1.52", "50", "unmatched"),
-        ("1.5", "52", "unmatched"),
-        ("1.520001", "50", "unmatched"),
-        ("1.5", "52.001", "unmatched"),
+        ("1.52", "50", "model"),
+        ("1.5", "52", "model"),
+        ("1.520001", "50", "model"),
+        ("1.5", "52.001", "model"),
     ],
 )
 def test_strict_close_and_offset_boundaries(nd, vd, expected):
@@ -94,7 +94,7 @@ def test_profiles_and_exclusions_are_explicit_not_filename_inferred():
         == "O"
     )
     excluded_only = match_prescription(source, catalogue[1:], "canon")
-    assert excluded_only.matches[0].status == "unmatched"
+    assert excluded_only.matches[0].status == "model"
 
 
 def test_offset_sign_and_source_values_are_preserved():
@@ -248,7 +248,7 @@ def test_input_rejects_offsets_without_base_typecode(extra):
         prescription_from_dict(data)
 
 
-def test_air_and_unmatched_are_distinct_and_preserved():
+def test_air_and_model_are_distinct_and_source_is_preserved():
     source = Prescription(
         1,
         "test",
@@ -259,7 +259,7 @@ def test_air_and_unmatched_are_distinct_and_preserved():
         ),
     )
     result = match_prescription(source, [])
-    assert [item.status for item in result.matches] == ["air", "unmatched"]
+    assert [item.status for item in result.matches] == ["air", "model"]
     assert result.prescription == source
 
 
@@ -278,6 +278,7 @@ def test_real_sample_catalogue_is_a_diagnostic_not_a_ranking_golden():
         "supplied",
         "close",
         "offset",
+        "model",
         "unmatched",
     }
 
@@ -311,12 +312,12 @@ def test_all_profile_orders_and_exclusions(profile, order, excluded):
         )
     for maker in excluded:
         result = match_prescription(source, [glass(maker, "1.5", "50", maker)], profile)
-        assert result.matches[0].status == "unmatched"
+        assert result.matches[0].status == "model"
         aspheric = replace(source, aspheres=(_asphere("1"),))
         molding = match_prescription(
             aspheric, [glass(maker, "1.5", "50", maker, molding=True)], profile
         )
-        assert molding.matches[0].status == "unmatched"
+        assert molding.matches[0].status == "model"
     assert tuple(PROFILES) == ("default", "canon", "nikon", "sony", "sigma", "fujifilm")
 
 
@@ -381,13 +382,34 @@ def test_explicit_dual_source_compares_pgf_to_pgf_only_catalogue():
     assert residuals["dpgf"]["catalogue_provenance"] == "derived_from_pgf_vd"
 
 
-def test_unmatched_pgf_source_retains_effective_dispersion_in_report():
+def test_model_pgf_source_retains_effective_dispersion_in_report():
     source = Surface("1", "10", "2", nd="1.9", vd="20.0", pgf=".70")
     match = match_prescription(prescription(source), []).matches[0]
-    assert match.status == "unmatched"
+    assert match.status == "model"
     assert (
         match.source_effective_dispersion["dpgf"]["provenance"] == "derived_from_pgf_vd"
     )
+
+
+def test_model_has_no_catalogue_identity_or_offsets_and_legacy_summary_key():
+    source = Surface("1", "10", "2", nd="1.9", vd="20")
+    result = match_prescription(prescription(source), [])
+    match = result.matches[0]
+    assert match.status == "model"
+    assert match.selected_manufacturer is None
+    assert match.selected_typecode is None
+    assert match.selected is None
+    assert result.prescription.surfaces[0] == source
+    assert result.report()["summary"]["model"] == 1
+    assert result.report()["summary"]["unmatched"] == 0
+
+
+@pytest.mark.parametrize(
+    ("nd", "vd"), [("NaN", "50"), ("1.5", "Infinity"), ("0", "50"), ("1.5", "-1")]
+)
+def test_public_matcher_rejects_invalid_numeric_model_data(nd, vd):
+    with pytest.raises(ValueError, match="finite positive|finite decimal string"):
+        match_prescription(prescription(Surface("1", "10", "2", nd=nd, vd=vd)), [])
 
 
 def test_derived_catalogue_dispersion_beats_missing_candidate():

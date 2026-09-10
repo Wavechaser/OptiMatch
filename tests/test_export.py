@@ -5,9 +5,14 @@ import pytest
 
 from optics_prescription_matcher.export import _asphere_lines, render_zmx
 from optics_prescription_matcher.inputs import prescription_from_dict
-from optics_prescription_matcher.matching import Match, MatchingResult
+from optics_prescription_matcher.matching import (
+    Match,
+    MatchingResult,
+    match_prescription,
+)
 from optics_prescription_matcher.models import (
     Asphere,
+    CatalogGlass,
     Configuration,
     Prescription,
     Solve,
@@ -64,6 +69,146 @@ def test_render_zmx_is_utf16_bom_and_uses_verified_core_records():
     assert "DIAM" not in text and "MEMA" not in text and "GCAT" not in text
     assert " None " not in text
     assert report["zmx"]["surface_map"] == {"OBJ": 0, "1": 1, "2": 2, "IMG": 3}
+
+
+@pytest.mark.parametrize(
+    ("pgf", "dpgf", "expected", "provenance"),
+    [
+        (None, "-.0072", "-.0072", "supplied"),
+        (".56", None, None, "derived_from_pgf_vd"),
+        (None, None, "0", "default_zero"),
+    ],
+)
+def test_model_glass_uses_source_dispersion_precedence(pgf, dpgf, expected, provenance):
+    base = result()
+    surfaces = (
+        base.prescription.surfaces[0],
+        replace(
+            base.prescription.surfaces[1],
+            material=None,
+            nd="1.6934996",
+            vd="53.1858",
+            pgf=pgf,
+            dpgf=dpgf,
+        ),
+        *base.prescription.surfaces[2:],
+    )
+    matched = match_prescription(replace(base.prescription, surfaces=surfaces), [])
+    text, report = render_zmx(matched)
+    effective = matched.matches[1].source_effective_dispersion["dpgf"]
+    expected = expected or effective["value"]
+    assert effective["provenance"] == provenance
+    assert f"GLAS ___BLANK 1 0 1.6934996 53.1858 {expected} 0 0 0 0 0" in text.decode(
+        "utf-16"
+    )
+    assert report["zmx"]["setup"]["warnings"] == []
+
+
+def test_named_and_offset_glass_use_effective_catalogue_dispersion_and_existing_modes():
+    base = result()
+    surfaces = list(base.prescription.surfaces)
+    surfaces[1] = replace(surfaces[1], material=None, nd="1.51", vd="51")
+    matched = match_prescription(
+        replace(base.prescription, surfaces=tuple(surfaces)),
+        [CatalogGlass("Ohara", "G", "1.5", "50", ".56", None)],
+    )
+    effective = matched.matches[1].selected["catalogue_effective_dispersion"]["dpgf"]
+    line = next(
+        line.strip()
+        for line in render_zmx(matched)[0].decode("utf-16").splitlines()
+        if "GLAS G" in line
+    )
+    assert line == f"GLAS G 4 0 1.5 50 {effective['value']} 0 0 0 0.01 1"
+
+    surfaces[1] = replace(surfaces[1], nd="1.5", vd="50")
+    close = match_prescription(
+        replace(base.prescription, surfaces=tuple(surfaces)),
+        [CatalogGlass("Ohara", "G", "1.5", "50", ".56", None)],
+    )
+    effective = close.matches[1].selected["catalogue_effective_dispersion"]["dpgf"]
+    assert f"GLAS G 0 0 1.5 50 {effective['value']} 0 0 0 0 0" in render_zmx(close)[
+        0
+    ].decode("utf-16")
+
+
+def test_named_glass_retains_legacy_raw_catalogue_dpgf_diagnostic():
+    base = result()
+    matches = list(base.matches)
+    matches[1] = replace(
+        matches[1],
+        selected={
+            "catalogue_nd": "1.5",
+            "catalogue_vd": "50",
+            "catalogue_dpgf": ".004",
+        },
+    )
+    assert "GLAS S-BSL7 0 0 1.5 50 .004 0 0 0 0 0" in render_zmx(
+        replace(base, matches=tuple(matches))
+    )[0].decode("utf-16")
+
+
+def test_explicit_unmatched_result_remains_rejected():
+    base = result()
+    matches = list(base.matches)
+    matches[1] = replace(matches[1], status="unmatched")
+    with pytest.raises(ValueError, match="blocked by unmatched"):
+        render_zmx(replace(base, matches=tuple(matches)))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("nd", "NaN"),
+        ("vd", "0"),
+        ("pgf", "Infinity"),
+        ("dpgf", "NaN"),
+        ("dpgf", "0\n1"),
+        ("pgf", 1),
+    ],
+)
+def test_direct_model_result_rejects_invalid_optical_values(field, value):
+    base = result()
+    surfaces = list(base.prescription.surfaces)
+    surfaces[1] = replace(
+        replace(surfaces[1], material=None, nd="1.6", vd="50"), **{field: value}
+    )
+    matches = list(base.matches)
+    matches[1] = Match("1", "model", "default", None, "1.6", "50")
+    direct = MatchingResult(
+        replace(base.prescription, surfaces=tuple(surfaces)), tuple(matches)
+    )
+    with pytest.raises(ValueError, match="model glass"):
+        render_zmx(direct)
+
+
+def test_direct_model_result_rejects_unknown_surface_and_catalogue_identity():
+    base = result()
+    unknown = replace(
+        base,
+        matches=base.matches
+        + (Match("missing", "model", "default", None, "1.6", "50"),),
+    )
+    with pytest.raises(ValueError, match="unknown surface"):
+        render_zmx(unknown)
+    surfaces = list(base.prescription.surfaces)
+    surfaces[1] = replace(surfaces[1], material=None, nd="1.6", vd="50")
+    matches = list(base.matches)
+    matches[1] = Match(
+        "1", "model", "default", None, "1.6", "50", selected_typecode="BAD"
+    )
+    with pytest.raises(ValueError, match="catalogue identity"):
+        render_zmx(
+            MatchingResult(
+                replace(base.prescription, surfaces=tuple(surfaces)), tuple(matches)
+            )
+        )
+    matches[1] = Match("1", "model", "default", "S-BSL7", "1.6", "50")
+    with pytest.raises(ValueError, match="catalogue identity"):
+        render_zmx(
+            MatchingResult(
+                replace(base.prescription, surfaces=tuple(surfaces)), tuple(matches)
+            )
+        )
 
 
 def _extended_values(lines):

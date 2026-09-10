@@ -97,10 +97,11 @@ def test_cli_writes_csv_and_deterministic_report(tmp_path, capsys):
         "supplied": 0,
         "close": 1,
         "offset": 0,
+        "model": 0,
         "unmatched": 0,
     }
     assert "S-BSL7" in (tmp_path / "study.csv").read_text(encoding="utf-8")
-    assert "matched=1, unmatched=0" in capsys.readouterr().out
+    assert "matched=1, model=0, unmatched=0" in capsys.readouterr().out
 
 
 def test_cli_refuses_existing_target_without_overwrite(tmp_path, capsys):
@@ -273,7 +274,49 @@ def test_cli_defaults_to_both_and_writes_binary_zmx(tmp_path):
     assert (tmp_path / "both.report.json").exists()
 
 
-def test_both_validates_zmx_before_writing_but_csv_only_allows_unmatched(tmp_path):
+def test_cli_model_fallback_writes_all_outputs_and_truthful_counts(tmp_path, capsys):
+    source, catalog = write_inputs(tmp_path)
+    data = json.loads(source.read_text(encoding="utf-8"))
+    data["surfaces"] = [
+        {"id": "OBJ", "radius": "0", "thickness": "infinity"},
+        {
+            "id": "1",
+            "radius": "50",
+            "thickness": "2",
+            "nd": "1.6934996",
+            "vd": "53.1858",
+            "stop": True,
+        },
+        {"id": "2", "radius": "-50", "thickness": "40"},
+        {"id": "IMG", "radius": "0", "thickness": ""},
+    ]
+    data["system"] = {
+        "aperture_type": "f_number",
+        "aperture_value": "4",
+        "field_preset": "aps-c",
+    }
+    source.write_text(json.dumps(data), encoding="utf-8")
+    prefix = tmp_path / "model"
+    assert main([str(source), "--catalog", str(catalog), "--output", str(prefix)]) == 0
+    assert (tmp_path / "model.csv").exists()
+    csv_text = (tmp_path / "model.csv").read_text(encoding="utf-8")
+    assert "1,50,2,,1.6934996,53.1858" in csv_text
+    assert "GLAS ___BLANK 1 0 1.6934996 53.1858 0 0 0 0 0 0" in (
+        tmp_path / "model.zmx"
+    ).read_text(encoding="utf-16")
+    report = json.loads((tmp_path / "model.report.json").read_text(encoding="utf-8"))
+    assert report["summary"]["model"] == 1
+    assert report["summary"]["unmatched"] == 0
+    assert (
+        report["surfaces"][1]["source_effective_dispersion"]["dpgf"]["provenance"]
+        == "default_zero"
+    )
+    output = capsys.readouterr()
+    assert "matched=0, model=1, unmatched=0" in output.out
+    assert "warning:" not in output.err
+
+
+def test_both_validates_setup_before_writing_and_csv_only_reports_model(tmp_path):
     source, catalog = write_inputs(tmp_path)
     both = tmp_path / "both_invalid"
     assert main([str(source), "--catalog", str(catalog), "--output", str(both)]) == 2
@@ -298,3 +341,8 @@ def test_both_validates_zmx_before_writing_but_csv_only_allows_unmatched(tmp_pat
         == 0
     )
     assert (tmp_path / "unmatched.csv").exists()
+    report = json.loads(
+        (tmp_path / "unmatched.report.json").read_text(encoding="utf-8")
+    )
+    assert report["summary"]["model"] == 1
+    assert report["summary"]["unmatched"] == 0

@@ -1,9 +1,9 @@
 # Desired features
 
 Status: validated JSON/CSV inputs, deterministic glass matching, CSV/ZMX output,
-the revised catalogue, all manufacturer profiles, molding-aware selection, and
-partial-dispersion derivation are implemented. Model-glass fallback is the pending
-R3 delivery; OCR remains planned.
+the revised catalogue, all manufacturer profiles, molding-aware selection,
+partial-dispersion derivation, and model-glass fallback are implemented. OCR
+remains planned.
 Engineering decisions and delivery checkpoints belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).
@@ -89,6 +89,10 @@ the materials or tolerances of production lenses.
 - Produce a ZMX study model with matched materials and applicable offsets,
   surface geometry, stop, and the units, fields, wavelengths, and aperture
   definition needed to study it.
+- Export a numerically valid no-match as fixed model glass using its source
+  nd/Vd and supplied, PgF-derived, or default-zero dPgF. Keep its CSV material
+  cell blank and report it separately from named matches; invalid optical data
+  remains an error.
 - Support ordinary even, extended even, and extended odd aspheres, including
   prescriptions exceeding the ordinary even coefficient capacity.
 - Retain supplied configurations and calculate configuration distances when the

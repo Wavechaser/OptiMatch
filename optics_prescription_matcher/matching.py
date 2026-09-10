@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, replace
 from decimal import Decimal, localcontext
 from typing import Any, Iterable
 
+from .inputs import decimal_value
 from .models import CatalogGlass, Prescription, Surface
 
 
@@ -76,7 +77,14 @@ class MatchingResult:
             "profile": self.profile,
             "summary": {
                 status: sum(match.status == status for match in self.matches)
-                for status in ("air", "supplied", "close", "offset", "unmatched")
+                for status in (
+                    "air",
+                    "supplied",
+                    "close",
+                    "offset",
+                    "model",
+                    "unmatched",
+                )
             },
             "surfaces": [asdict(match) for match in self.matches],
         }
@@ -133,6 +141,17 @@ def _effective_dispersion(
             "step": str(resolution),
         }
     return result
+
+
+def _model_dispersion(surface: Surface) -> dict[str, dict[str, str]]:
+    effective = _effective_dispersion(surface.pgf, surface.dpgf, surface.vd)
+    if "dpgf" not in effective:
+        effective["dpgf"] = {
+            "value": "0",
+            "provenance": "default_zero",
+            "step": "0",
+        }
+    return effective
 
 
 def _dispersion(
@@ -299,16 +318,14 @@ def _match_numeric(
         )
         return surface, Match(
             surface.source_id,
-            "unmatched",
+            "model",
             profile.name,
             None,
             surface.nd,
             surface.vd,
             reason=molding_reason
-            + "no eligible catalogue glass after profile exclusions",
-            source_effective_dispersion=_effective_dispersion(
-                surface.pgf, surface.dpgf, surface.vd
-            ),
+            + "no eligible catalogue glass after profile exclusions; using model glass",
+            source_effective_dispersion=_model_dispersion(surface),
         )
     ranked = sorted(eligible, key=key)
     selected = ranked[0]
@@ -477,6 +494,14 @@ def match_prescription(
                 else surface
             )
         else:
+            for label, value in (("nd", surface.nd), ("vd", surface.vd)):
+                number = decimal_value(
+                    value, f"surface {surface.source_id} numeric material {label}"
+                )
+                if number <= 0:
+                    raise ValueError(
+                        f"surface {surface.source_id}: numeric material requires finite positive {label}"
+                    )
             following_id = (
                 prescription.surfaces[index + 1].source_id
                 if index + 1 < len(prescription.surfaces)

@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"wrote {written}; matched="
         f"{summary['close'] + summary['offset'] + summary['supplied']}, "
+        f"model={summary['model']}, "
         f"unmatched={summary['unmatched']}"
     )
     return 0

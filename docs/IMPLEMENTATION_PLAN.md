@@ -1,7 +1,7 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
 Status: C1, C2, and C3 implemented and independently reviewed, 2026-09-10.
-The R0–R3 catalogue and matching-policy delivery is in progress.
+The R0–R3 catalogue and matching-policy delivery is complete, 2026-09-11.
 This plan applies the plan-work structure with small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
@@ -21,7 +21,7 @@ Accept future OCR results through the same structured input contract.
 | R0 | Organize the revised catalogue and record active policy | — | Data-only migration audit and baseline checks | Complete |
 | R1 | Accept the revised catalogue schema and scoped typecode normalization | R0 | Loader and compatibility tests | Complete |
 | R2 | Add profiles, PgF conversion, and asphere-driven molding preference | R1 | Boundary, ownership, and ranking tests | Complete |
-| R3 | Emit and validate model-glass fallbacks | R2 | Integrated CLI and OpticStudio checks | Pending |
+| R3 | Emit and validate model-glass fallbacks | R2 | Integrated CLI and OpticStudio checks | Complete |
 
 R0 moves the maintained CSV to `catalogs/REFERENCE_CATALOG.csv`; source XLSX
 workbooks remain samples and are not application inputs. The migration removes
@@ -96,7 +96,27 @@ collisions, unexpected input-byte changes, or host behavior contradicting the
 model serialization contract. OCR, e-line matching, optimization, and a general
 ZMX reader are non-goals for this delivery.
 
-## Completed C1–C3 baseline record
+## Current delivery execution evidence
+
+R3 execution boundary (base `9394723`): numeric no-match status, ZMX material
+serialization, CLI counts, related matching/export/CLI tests, and active docs.
+Retain the legacy `unmatched` summary key and rejection of explicitly unresolved
+results; ordinary matcher fallbacks now use `model`. No changes to setup, surface
+families, solves, source geometry, or output write/collision protection. Model
+nd/vd must be present, finite and positive, with no named identity or offsets.
+Host probe `output/probe_glas_flags.ps1` and its evidence establish mode-1 flags
+as VaryIndex/VaryAbbe/VarydPgF; all-zero models preserve nondefault nd/vd/dPgF
+through save/reload. Emit zeros, retaining existing named/offset flags. The
+probe does not establish cached mode-0 flag semantics. Gate: supplied/derived/
+default-zero model dPgF, truthful counts, source CSV preservation, named/offset
+regressions, and pre-write failure guards tested; generated models must pass
+OpticStudio property and finite-ray checks before fresh review and the commit
+`feat(export): emit model glass fallbacks`. Stop on host-contract contradictions.
+R3 passed 160 tests, Ruff lint/format, pip check, and diff checks. Fresh review
+approved the direct-model identity guard and its regression test. Three model
+fixtures passed independent OpticStudio load/save/reload and pupil-ray checks;
+their bytes still match the final exporter. Supplied, derived, and default-zero
+dPgF were checked independently, including a rational F2/K7 calculation.
 
 R2 execution boundary (base `cdea729`): matching policy and dispersion helper,
 CLI profile choices, their matching/CLI tests, and policy sections of active docs.
@@ -128,6 +148,31 @@ reference catalog schema`. Stop on unexpected data changes or scope expansion.
 R1 completed with 122 passing tests, Ruff lint/format, pip check, and diff checks.
 Fresh review confirmed parser rejection, legacy blank rows, scoped canonicalization,
 and source/report preservation. Both shipped catalogues load; no input data changed.
+
+### Final sweep and resumption
+
+Integrated directly on `main`: R0 `70d45ac`, R1 `cdea729`, R2 `9394723`, and R3
+is the commit containing this completion record (`feat(export): emit model glass
+fallbacks`). No task branches or worktrees were created, and no push was made.
+The final 160-test suite, Ruff lint/format, pip check and diff checks all passed.
+The legacy-catalogue host oracle verified all three asphere families with zero
+sag discrepancy, three configuration ray traces, the compensator solve and
+nd/vd offsets 0.001/0.2. The complete maintained-catalogue workflow also resolved
+Canon's molding selection to Ohara L-BSL7 while preserving supplied S-BSL7 and
+its offsets, with all three configuration rays passing. Ignored reproducible
+checks/evidence: `output/check_r3_host_evidence.py`, `r3_host_evidence.json`,
+`check_host_study.py`, `check_final_reference_host.py`, and
+`final_reference_host_evidence.json`. Host checks describe these fixtures on
+OpticStudio 2023 R1.00, not every possible exported prescription.
+
+All four checkpoints are complete; no implementation blocker remains. Original
+Sigma/workbook hashes and the migrated catalogue hash are unchanged since R0.
+Only 38 Ohara typecodes were normalized; no source numeric strings were changed.
+No user application was closed or modified; diagnostics remain ignored under
+`output/`. The next work requires a new request. ne/ve matching and OCR remain
+deferred; XLSX/AGF/database parsing and general ZMX importing remain out of scope.
+
+## Completed C1–C3 baseline record
 
 The remaining sections preserve the original implemented proposal and evidence.
 Where its earlier matching or unmatched-material policy differs, the current

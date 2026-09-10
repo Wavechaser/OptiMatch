@@ -82,8 +82,34 @@ GLAS typecode mode u1 nd vd dPgF u2 u3 u4 delta_nd delta_vd
 ```
 
 Ordinary catalogue records use mode `0`; offset examples use mode `4`.
-`u1` through `u4` are not decoded. Do not assume the `nd`, `vd`, and `dPgF`
-slots override catalogue dispersion when the typecode resolves. The user's
+Fixed model glass uses the verified mode-1 shape:
+
+```text
+GLAS ___BLANK 1 0 nd vd dPgF 0 0 0 0 0
+```
+
+The source nd/Vd are retained. dPgF precedence is supplied value, PgF/Vd
+derivation, then fixed zero. This zero is an export default, not matching data.
+The final three flags before the offset tail map to `VaryIndex`, `VaryAbbe`, and
+`VarydPgF` for mode 1; fixed study models emit all three as zero. A controlled
+2026-09-11 OpticStudio 2023 R1.00 save/reload probe independently toggled each
+flag and preserved nondefault 1.6934996/53.1858/-0.0072 values with all flags
+zero (`output/probe_glas_flags.ps1` and `probe_glas_flags_evidence.txt`). This
+does not establish the semantics of the same cached positions in mode 0; their
+existing zeros remain unchanged.
+
+Three public-CLI fixtures then passed an independent load/save/reload check in
+the same host: supplied `-0.0072`, independently verified PgF-derived
+`0.0046188780850185720181593066`, and default `0` dPgF all reopened as fixed
+MaterialModel solves with nd `1.6934996`, Vd `53.1858`, and all vary flags false.
+Each retained the intended ±50 mm radii, 2/40 mm distances, f/4 aperture, five
+wavelengths with primary #2, and produced a finite non-vignetted pupil ray with
+error code zero. Machine-readable evidence is retained in ignored local files
+`output/r3_host_evidence.json` and `output/r3_host_run.json`.
+
+For ordinary and offset modes, `u1` through `u4` remain undecoded; the mode-1
+flag evidence above is deliberately narrower. Do not assume the `nd`, `vd`, and
+`dPgF` slots override catalogue dispersion when the typecode resolves. The user's
 test with `GLAS S-LAH58 0 0 0 0 0 0 0 0 0 0` produced unchanged results.
 Populate known sensible catalogue numbers where available, but do not invent
 unknown flags or use those numbers as a substitute for successful catalogue lookup.

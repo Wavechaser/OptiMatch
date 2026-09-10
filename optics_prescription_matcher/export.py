@@ -8,7 +8,8 @@ from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import TextIO
 
-from .matching import MatchingResult
+from .inputs import decimal_value
+from .matching import MatchingResult, pgf_to_dpgf
 from .models import Asphere, Prescription, SystemSettings, Wavelength
 from .solves import resolve_solves
 
@@ -266,6 +267,39 @@ def _validate_zmx(result: MatchingResult) -> tuple[dict[str, int], str]:
     ]
     if unmatched:
         raise ValueError(f"ZMX blocked by unmatched material at surface {unmatched[0]}")
+    surfaces = {surface.source_id: surface for surface in prescription.surfaces}
+    for match in result.matches:
+        if match.status != "model":
+            continue
+        surface = surfaces.get(match.surface_id)
+        if surface is None:
+            raise ValueError(
+                f"model match references unknown surface {match.surface_id}"
+            )
+        if (
+            surface.material is not None
+            or surface.nd_offset is not None
+            or surface.vd_offset is not None
+            or match.original_material is not None
+            or match.selected_manufacturer is not None
+            or match.selected_typecode is not None
+            or match.selected is not None
+        ):
+            raise ValueError(
+                f"surface {surface.source_id}: model glass cannot have catalogue identity or offsets"
+            )
+        for label, value in (("nd", surface.nd), ("vd", surface.vd)):
+            number = decimal_value(
+                value, f"surface {surface.source_id} model glass {label}"
+            )
+            if number <= 0:
+                raise ValueError(
+                    f"surface {surface.source_id}: model glass requires finite positive {label}"
+                )
+        for label, value in (("PgF", surface.pgf), ("dPgF", surface.dpgf)):
+            if value is None:
+                continue
+            decimal_value(value, f"surface {surface.source_id} model glass {label}")
     return ids, stop
 
 
@@ -354,15 +388,42 @@ def render_zmx(
             lines.append(f"  {keyword} {ids[solve.reference_surface_id]} {solve.total}")
         if surface.source_id == stop:
             lines.append("  STOP")
-        if surface.material:
-            token = _safe_token(
-                surface.material, f"surface {surface.source_id} material"
+        match = matches.get(surface.source_id)
+        if surface.material or (match is not None and match.status == "model"):
+            detail = match.selected or {} if match is not None else {}
+            model = match is not None and match.status == "model"
+            token = (
+                "___BLANK"
+                if model
+                else _safe_token(
+                    surface.material, f"surface {surface.source_id} material"
+                )
             )
-            detail = matches[surface.source_id].selected or {}
             nd = detail.get("catalogue_nd") or surface.nd or "0"
             vd = detail.get("catalogue_vd") or surface.vd or "0"
-            dpgf = detail.get("catalogue_dpgf") or "0"
-            mode = "4" if surface.nd_offset is not None else "0"
+            catalogue_effective = detail.get("catalogue_effective_dispersion", {})
+            source_effective = (
+                match.source_effective_dispersion or {} if match is not None else {}
+            )
+            if model:
+                dpgf = (
+                    surface.dpgf
+                    or (
+                        pgf_to_dpgf(surface.pgf, surface.vd)
+                        if surface.pgf is not None
+                        else None
+                    )
+                    or "0"
+                )
+            elif detail:
+                dpgf = (
+                    detail.get("catalogue_dpgf")
+                    or catalogue_effective.get("dpgf", {}).get("value")
+                    or "0"
+                )
+            else:
+                dpgf = source_effective.get("dpgf", {}).get("value", "0")
+            mode = "1" if model else "4" if surface.nd_offset is not None else "0"
             lines.append(
                 f"  GLAS {token} {mode} 0 {nd} {vd} {dpgf} 0 0 0 "
                 f"{surface.nd_offset or '0'} {surface.vd_offset or '0'}"

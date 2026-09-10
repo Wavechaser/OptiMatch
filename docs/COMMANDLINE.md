@@ -12,11 +12,12 @@ storage are out of scope. OCR can be added independently later.
 
 ## Current delivery note
 
-At the R2 matching-policy checkpoint, the executable accepts both the historical
+At the R3 matching-policy checkpoint, the executable accepts both the historical
 six-column catalogue and the revised nine-column catalogue described below. All
 six profiles, molding-aware selection, and partial-dispersion derivation are
-implemented. An unmatched material still blocks ZMX output; model-glass fallback
-remains the pending R3 checkpoint.
+implemented. A valid numeric no-match is exported as model glass. An explicitly
+unresolved legacy result still blocks ZMX output; all ordinary setup, identifier,
+and optical-data validation also remains in force.
 
 The active delivery policy uses these strict numerical boundaries:
 
@@ -32,7 +33,7 @@ strict promotion window `|Δnd| < 0.005`, `|ΔVd| < 0.5`; an empty promotion poo
 falls back to ordinary matching. This is a bounded preference, not an exclusion
 of polymers, crystals, or ordinary glass.
 
-The completed CLI will accept `default`, `canon`, `nikon`, `sony`, `sigma`, and
+The CLI accepts `default`, `canon`, `nikon`, `sony`, `sigma`, and
 `fujifilm`. Their precise preference orders and exclusions are recorded in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Profiles are selected only by
 `--profile`, never inferred from a filename. e-line ne/ve matching is deferred.
@@ -64,8 +65,8 @@ python -m optics_prescription_matcher INPUT --catalog CSV --output PREFIX
 Exit status is `0` on success/help and `2` for command syntax, input, export or
 filesystem errors handled by the CLI. Errors go to stderr, successful output
 paths and matching counts to stdout. A zero-aperture warning also goes to stderr
-but is not an export failure. An unmatched material can succeed in CSV-only mode;
-it blocks ZMX output. Inspect the report instead of treating status 0 as optical
+but is not an export failure. Numerically valid model glass can succeed in every
+format. Inspect the report instead of treating status 0 as optical
 validation. There is no automatic retry, interactive prompt or host launch.
 
 Run the study-model workflow with a canonical JSON or sectioned CSV input:
@@ -140,7 +141,9 @@ analysis aperture. Applied settings and warnings appear in the JSON report.
 Other sample-specific header settings are not copied.
 
 The JSON report distinguishes air, supplied typecodes, close matches, offset
-matches, and unmatched properties. It includes signed prescription-minus-
+matches, model glass, and the retained legacy unmatched category. CLI `matched`
+counts only named supplied/close/offset results; `model` is separate. The report
+includes signed prescription-minus-
 catalogue differences, source precision steps, partial-dispersion residuals,
 effective supplied/derived dispersion values and their provenance, molding
 suitability, asphere trigger IDs, alternatives, ambiguities, and the ranking
@@ -156,7 +159,11 @@ contributes only that derived dPgF comparison channel; explicitly supplied PgF
 and dPgF retain both channels and use the maximum normalized residual. Derived
 format resolution is the PgF last-place step plus the absolute normal-line slope
 times the Vd last-place step. Source and catalogue strings are not rewritten,
-and missing catalogue dispersion remains missing rather than becoming zero.
+and missing catalogue dispersion remains missing rather than becoming zero for
+matching. For export, named glasses use effective catalogue dPgF when available.
+A model glass uses source dPgF, otherwise derives it from PgF/Vd, otherwise uses
+fixed zero; that last export fallback is reported as `default_zero` and is not a
+warning.
 
 ## Prescription inputs
 
@@ -171,7 +178,10 @@ Optical values must be finite, with nd/vd and populated ne/ve positive.
 
 Ohara typecodes have all whitespace removed before validation and duplicate
 detection. Other manufacturers lose only surrounding whitespace; internal spaces
-are retained, while control characters remain invalid. Example:
+are retained, while control characters remain invalid. A selected typecode with
+internal spaces cannot be emitted as a ZMX token: supply its verified single-token
+Zemax name, or use CSV-only output. Do not remove non-Ohara spaces by guesswork.
+Example:
 
 ```csv
 Manufacturer,Typecode,nd,vd,ne,ve,PgF,dPgF,PrecisionMolding
