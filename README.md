@@ -4,12 +4,68 @@ Python tools for producing credible optical study prescriptions from patent
 data, using best-effort manufacturer preferences for glass selection. Results
 are study substitutes, not representations of production samples.
 
-The repository currently contains project scaffolding and reference data.
-Matching, OCR, and ZMX export are not implemented yet. The intended workflow is
+The repository contains validated JSON/CSV input records and sectioned CSV
+output. Matching, OCR, and ZMX export are not implemented yet. The intended workflow is
 supplied transcription or OCR, structured prescription, glass matching, then
 CSV and ZMX export. Catalogue input is CSV exported from the user's maintained
 Excel workbook. XLSX parsing, AGF parsing, and SQLite/database storage are out
 of scope. OCR can be added independently later.
+
+## Prescription inputs
+
+Load canonical JSON or adapt the historical sectioned CSV:
+
+```python
+from optics_prescription_matcher.inputs import (
+    load_catalog_csv,
+    load_prescription_json,
+    load_sectioned_csv,
+)
+
+prescription = load_prescription_json("prescription.json")
+catalogue = load_catalog_csv("samples/combined_glass_catalog.csv")
+legacy = load_sectioned_csv("samples/sample_lens_data.csv")
+```
+
+The minimal canonical schema is explicit. Optical quantities are JSON strings
+so their source decimals survive; JSON numbers are rejected.
+
+```json
+{
+  "schema_version": 1,
+  "title": "Example study lens",
+  "units": "mm",
+  "declared_symbols": ["d0"],
+  "surfaces": [
+    {"id": "OBJ", "radius": "infinity", "thickness": "d0"},
+    {"id": "1", "radius": "38.185", "thickness": "3.07",
+     "nd": "1.834807", "vd": "42.7253", "stop": true},
+    {"id": "IMG", "radius": "0", "thickness": ""}
+  ],
+  "aspheres": [
+    {"surface_id": "1", "family": "even", "conic": "0",
+     "coefficients": {"4": "-3.4255E-05"}, "normalization": "sag"}
+  ],
+  "configurations": [
+    {"name": "infinity", "aperture": "2.8",
+     "thicknesses": {"d0": "infinity"}}
+  ]
+}
+```
+
+Optional top-level fields are `system`, `solves`, `rounding_steps`, and
+`source_precision_trusted`. A system may state its stop, aperture and field
+types, decimal-string fields, and wavelength objects (`value`, `weight`, and
+`primary`). Explicit solves use kind `complementary_gap` or `constant_span`, two
+surface IDs, and a decimal-string `total`; this layer preserves but does not
+infer solves.
+
+The CSV adapter recognizes Lens Data, Even/Odd Aspheres (legacy Asphere Data is
+even), and Multiconfiguration Data sections. Lens headers may use `Surface` or
+`#`, and `nd offset`/`vd offset`, `Δnd`/`Δvd`, or legacy `?nd`/`?vd`. Optional
+metadata JSON may overlay fields absent from CSV but cannot replace CSV tables.
+Unknown fields, sections, duplicate identifiers, incomplete nd/vd pairs,
+undeclared symbols, and misplaced nonfinite values are rejected with location.
 
 ## Development (Windows / PowerShell)
 
@@ -40,7 +96,7 @@ There are no runtime dependencies yet; development tools are declared in
 
 - `optics_prescription_matcher/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
-- `tests/`: behavior tests; currently an installation smoke test.
+- `tests/`: input validation, CSV round-trip, and installation tests.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
 - `samples/sample_lens_data.csv`: worked, multi-section prescription CSV.
 - `samples/EF-M 22mm F2 STM.ZMX` and `samples/14-24mm F2.8 DG DN Art.ZMX`: original

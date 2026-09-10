@@ -1,6 +1,6 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
-Status: draft proposal, 2026-09-10. No matcher, parser, or exporter is implemented.
+Status: implementation authorized, 2026-09-10. C1 complete; C2 next.
 This plan applies the plan-work structure with three small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
@@ -130,7 +130,9 @@ substitute and records alternatives; it does not stall the whole workflow.
 For partial dispersion, compare only the fields actually supplied, using the
 source's last stated decimal place to scale residuals. If both PgF and dPgF are
 given, retain both residuals but do not treat them as independent statistical
-evidence. Missing catalogue dispersion must be identified in the report, not
+evidence: use the maximum normalized residual as one proximity dimension, with
+missing-field count preceding it in ranking. Missing catalogue dispersion must
+be identified in the report, not
 scored as perfect agreement. Do not derive dPgF from PgF without a verified
 normal-line convention. Relative priority of dispersion versus profile and this
 precision-based scaling are proposed defaults to validate on labelled examples.
@@ -207,9 +209,20 @@ block input validation or pure matching tests.
 
 ## Checkpoint register
 
+Execution boundary: direct work on `main`, base `ed91cf6`, serial checkpoints
+with GPT-5.6 builders and fresh read-only reviewers under execute-task. No push.
+C1 owns models.py, inputs.py, export.py (CSV only), tests/test_inputs.py,
+tests/test_csv.py, and README input examples. C2 owns matching.py, __main__.py,
+matching/CLI tests and matching documentation; changes to C1 interfaces require
+focused regression checks. C3 owns exporter/solve code, export/solve tests, CLI
+integration and ZMX documentation. The orchestrator owns this register and
+shared rule updates. Each checkpoint retains the exact gates below; unavailable
+OpticStudio validation keeps C3 open rather than converting it to a Python-only
+acceptance gate. No OCR/XLSX/AGF/database work enters these populations.
+
 | ID | Accepted outcome | Depends on | Primary verification | Status |
 |---|---|---|---|---|
-| C1 | Validated prescription/catalogue records and faithful CSV round trip | Baseline | Sample sections, numeric grammar and diagnostics | pending |
+| C1 | Validated prescription/catalogue records and faithful CSV round trip | Baseline | Sample sections, numeric grammar and diagnostics | complete |
 | C2 | Deterministic preference-aware glass choices and report | C1 | Gates, profiles, offsets and unresolved outcomes | pending |
 | C3 | Usable ZMX export, configurations and eligible solves | C2 | Sag/equation checks and OpticStudio load/trace | pending |
 
@@ -251,6 +264,15 @@ rewritten and no unknown field is silently discarded. Review sample diffs.
 
 **Scope and approach.** Add pure candidate filtering/ranking functions, a small
 profile mapping, result reporting, and the matching CLI path. No ZMX or OCR yet.
+Finite population: `matching.py`, `__main__.py`, `tests/test_matching.py`,
+`tests/test_cli.py`, CSV rendering integration in `export.py`, and matching
+usage/status in README and FEATURES. Preserve C1 source strings and public
+loaders; use immutable replacement for matched output, never mutate input.
+Expose the prescribed default/Canon/Nikon profiles explicitly. Render CSV and
+report before writing; protect input/catalogue/metadata paths even with
+`--overwrite`. C2's CLI produces CSV/report only; C3 adds an explicit format
+selection and ZMX eligibility checks. Matching-policy fixtures encode the user's
+labelled manufacturer preferences, not unverifiable historical exact matches.
 
 **Acceptance criteria.** Strict gates, supplied typecodes, exclusions and profile
 preferences behave as specified. Missing optional dispersion remains visible.
@@ -325,10 +347,13 @@ Python tests pass. Checkpoint tests alone do not replace this end-to-end sweep.
 
 ## Resumption block
 
-- Current checkpoint: C1 pending; C2/C3 pending. This change only drafts the plan.
-- Existing evidence: package smoke test in `tests/test_package.py`, reference
-  files in `samples/`, and syntax observations in `docs/ZMX_SYNTAX.md`.
-- Next action: implement C1's canonical records and parser characterization tests.
+- Current checkpoint: C1 complete; C2 next, C3 pending.
+- C1 evidence: 40 tests pass, Ruff lint/format and diff checks pass. Fresh
+  independent GPT-5.6 review approved corrected reference resolution, CSV column
+  validation, malformed-type diagnostics, and normalization/stop round trips.
+  Original sample files are unchanged. Canonical JSON retains system/solve
+  metadata that sectioned CSV alone cannot encode.
+- Next action: implement C2 matching/report/CLI against the validated C1 API.
 - Commands: `.\.venv\Scripts\python.exe -m pytest`,
   `.\.venv\Scripts\python.exe -m ruff check .`,
   `.\.venv\Scripts\python.exe -m ruff format --check .`,

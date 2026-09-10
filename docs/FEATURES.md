@@ -1,7 +1,7 @@
 # Desired features
 
-Status: the project currently provides a Python scaffold only. The matching,
-prescription output, and OCR capabilities below are planned, not implemented.
+Status: validated JSON/CSV inputs and sectioned CSV output are implemented.
+Glass matching, ZMX output, and OCR below remain planned at this checkpoint.
 Engineering decisions and delivery checkpoints belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).
