@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-from .export import render_prescription_csv
+from .export import merge_export_report, render_prescription_csv, render_zmx
 from .inputs import (
     InputError,
     load_catalog_csv,
@@ -33,6 +32,7 @@ def _parser() -> argparse.ArgumentParser:
         "--metadata", type=Path, help="JSON metadata overlay for CSV input"
     )
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--format", choices=("csv", "zmx", "both"), default="both")
     return parser
 
 
@@ -42,7 +42,7 @@ def _same_path(left: Path, right: Path) -> bool:
     )
 
 
-def _write_outputs(outputs: dict[Path, str], overwrite: bool) -> None:
+def _write_outputs(outputs: dict[Path, str | bytes], overwrite: bool) -> None:
     for path in outputs:
         if path.exists() and not overwrite:
             raise ValueError(f"output exists: {path}; pass --overwrite to replace it")
@@ -51,13 +51,16 @@ def _write_outputs(outputs: dict[Path, str], overwrite: bool) -> None:
     try:
         for path, content in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
-            handle, name = tempfile.mkstemp(
-                prefix=f".{path.name}.", dir=path.parent, text=True
-            )
+            binary = isinstance(content, bytes)
+            handle, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
             temp = Path(name)
             temporary.append(temp)
-            with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
-                stream.write(content)
+            if binary:
+                with os.fdopen(handle, "wb") as stream:
+                    stream.write(content)
+            else:
+                with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
+                    stream.write(content)
         for temp, path in zip(temporary, outputs, strict=True):
             existed = path.exists()
             if overwrite:
@@ -86,11 +89,12 @@ def _write_outputs(outputs: dict[Path, str], overwrite: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     csv_path = Path(f"{args.output}.csv")
+    zmx_path = Path(f"{args.output}.zmx")
     report_path = Path(f"{args.output}.report.json")
     sources = [args.input, args.catalog, *([args.metadata] if args.metadata else [])]
     if any(
         _same_path(target, source)
-        for target in (csv_path, report_path)
+        for target in (csv_path, zmx_path, report_path)
         for source in sources
     ):
         print(
@@ -110,18 +114,24 @@ def main(argv: list[str] | None = None) -> int:
         result = match_prescription(
             prescription, load_catalog_csv(args.catalog), args.profile
         )
-        outputs = {
-            csv_path: render_prescription_csv(result.prescription),
-            report_path: json.dumps(result.report(), indent=2, ensure_ascii=False)
-            + "\n",
-        }
+        outputs: dict[Path, str | bytes] = {}
+        if args.format in {"csv", "both"}:
+            outputs[csv_path] = render_prescription_csv(result.prescription)
+        zmx_report = None
+        if args.format in {"zmx", "both"}:
+            zmx_bytes, zmx_report = render_zmx(result)
+            outputs[zmx_path] = zmx_bytes
+        outputs[report_path] = merge_export_report(result, zmx_report)
         _write_outputs(outputs, args.overwrite)
     except (InputError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     summary = result.report()["summary"]
+    written = ", ".join(str(path) for path in outputs)
     print(
-        f"wrote {csv_path} and {report_path}; matched={summary['close'] + summary['offset'] + summary['supplied']}, unmatched={summary['unmatched']}"
+        f"wrote {written}; matched="
+        f"{summary['close'] + summary['offset'] + summary['supplied']}, "
+        f"unmatched={summary['unmatched']}"
     )
     return 0
 

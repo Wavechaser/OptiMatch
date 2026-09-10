@@ -122,6 +122,7 @@ def _diagnostic(surface: Surface, glass: CatalogGlass) -> dict[str, Any]:
         "source_vd_offset": surface.vd_offset,
         "catalogue_nd": glass.nd,
         "catalogue_vd": glass.vd,
+        "catalogue_dpgf": glass.dpgf,
         "nd_delta": str(nd_delta),
         "vd_delta": str(vd_delta),
         "dispersion": {
@@ -327,6 +328,7 @@ def match_prescription(
                                 "typecode": chosen.typecode,
                                 "catalogue_nd": chosen.nd,
                                 "catalogue_vd": chosen.vd,
+                                "catalogue_dpgf": chosen.dpgf,
                                 "source_nd_offset": surface.nd_offset,
                                 "source_vd_offset": surface.vd_offset,
                             }

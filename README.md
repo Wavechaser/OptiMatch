@@ -5,26 +5,40 @@ data, using best-effort manufacturer preferences for glass selection. Results
 are study substitutes, not representations of production samples.
 
 The repository contains validated JSON/CSV input records, deterministic glass
-matching, a machine-readable decision report, and sectioned CSV output. OCR and
-ZMX export are not implemented yet. Catalogue input is CSV exported from the
+matching, a machine-readable decision report, and sectioned CSV/ZMX output. OCR
+is not implemented. Catalogue input is CSV exported from the
 user's maintained Excel workbook. XLSX parsing, AGF parsing, and SQLite/database
 storage are out of scope. OCR can be added independently later.
 
 ## Match a prescription
 
-Run the C2 workflow with a canonical JSON or sectioned CSV input:
+Run the study-model workflow with a canonical JSON or sectioned CSV input:
 
 ```powershell
 .\.venv\Scripts\python.exe -m optics_prescription_matcher prescription.json `
   --catalog samples/combined_glass_catalog.csv --profile default `
-  --output output/study
+  --output output/study --format both
 ```
 
 Profiles are `default` (Ohara, Hoya, Hikari), `canon` (Ohara, Hoya; Hikari
-excluded for inferred matches), and `nikon` (Hikari, Ohara, Hoya). The command
-writes `output/study.csv` and `output/study.report.json`. Existing outputs require
+excluded for inferred matches), and `nikon` (Hikari, Ohara, Hoya). The
+`--format` option defaults to `both`; use `csv` for an incomplete transcription that
+lacks the system metadata required by ZMX, or `zmx` for model-only output. A JSON
+report is always written on success. Existing outputs require
 `--overwrite`; outputs can never overwrite the input, catalogue, or CSV metadata
-overlay. Pass `--metadata PATH` only with a sectioned CSV input.
+overlay. Pass `--metadata PATH` only with a sectioned CSV input. Requested outputs
+are validated before writing; replacing several files is not a single transaction.
+
+ZMX output requires explicit OBJ and IMG endpoints, one internal stop, a positive
+f-number, angle or real-image-height fields, and positive wavelengths/weights.
+It writes UTF-16 LE with a BOM and preserves source coefficients. Source distances
+remain in CSV/report; ZMX applies disclosed solve adjustments and derivations.
+It supports ordinary/extended even and extended odd aspheres, omits fixed aperture
+records and GCAT, and emits neutral vignetting configuration operands. Configured
+infinite object distance uses the tested numeric `1e10` representation and is
+disclosed in the report. Unknown supplied typecodes remain visibly
+host-lookup-unverified; the report does not claim that a particular output was
+loaded by OpticStudio.
 
 The JSON report distinguishes air, supplied typecodes, close matches, offset
 matches, and unmatched properties. It includes signed prescription-minus-
@@ -51,8 +65,9 @@ catalogue = load_catalog_csv("samples/combined_glass_catalog.csv")
 legacy = load_sectioned_csv("samples/sample_lens_data.csv")
 ```
 
-The minimal canonical schema is explicit. Optical quantities are JSON strings
-so their source decimals survive; JSON numbers are rejected.
+The minimal transcription schema is explicit. Optical quantities are JSON strings
+so their source decimals survive; JSON numbers are rejected. This example is for
+CSV output; ZMX also needs the system metadata described below.
 
 ```json
 {
@@ -82,7 +97,21 @@ Optional top-level fields are `system`, `solves`, `rounding_steps`, and
 types, decimal-string fields, and wavelength objects (`value`, `weight`, and
 `primary`). Explicit solves use kind `complementary_gap` or `constant_span`, two
 surface IDs, and a decimal-string `total`; this layer preserves but does not
-infer solves.
+infer solves. ZMX export resolves explicit constraints and conservatively infers
+eligible constant-distance relationships across configurations. Original distances
+remain in CSV; the report records derived values and rounding adjustments.
+
+For example, a `system` object can supply the remaining ZMX essentials:
+
+```json
+{
+  "aperture_type": "f_number",
+  "aperture_value": "2.8",
+  "field_type": "angle",
+  "fields": ["0", "5"],
+  "wavelengths": [{"value": "0.5875618", "weight": "1", "primary": true}]
+}
+```
 
 The CSV adapter recognizes Lens Data, Even/Odd Aspheres (legacy Asphere Data is
 even), and Multiconfiguration Data sections. Lens headers may use `Surface` or
@@ -113,14 +142,14 @@ Run checks:
 ```
 
 Format Python code with `.\.venv\Scripts\python.exe -m ruff format .`.
-There are no runtime dependencies yet; development tools are declared in
+There are no runtime dependencies; development tools are declared in
 `pyproject.toml`. Dependencies are not locked at this stage.
 
 ## Layout and reference data
 
 - `optics_prescription_matcher/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
-- `tests/`: input validation, CSV round-trip, matching, CLI, and installation tests.
+- `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
 - `samples/sample_lens_data.csv`: worked, multi-section prescription CSV.
 - `samples/EF-M 22mm F2 STM.ZMX` and `samples/14-24mm F2.8 DG DN Art.ZMX`: original
@@ -133,7 +162,7 @@ There are no runtime dependencies yet; development tools are declared in
 
 - [Features](docs/FEATURES.md): desired capabilities, independent of implementation.
 - [Implementation proposal](docs/IMPLEMENTATION_PLAN.md): data contracts, matching
-  policy, exporter design, and pending implementation checkpoints.
+  policy, exporter design, and completed implementation checkpoints.
 - [ZMX syntax](docs/ZMX_SYNTAX.md): observed records, sources, and unresolved details.
 
 See `AGENTS.md` for development and optical-data conventions. Git attributes

@@ -107,6 +107,7 @@ def test_partial_dispersion_missing_metadata_is_not_a_perfect_match():
     ]
     result = match_prescription(prescription(surface), catalogue)
     assert result.prescription.surfaces[0].material == "KNOWN"
+    assert result.matches[0].selected["catalogue_dpgf"] is None
     missing = result.matches[0].alternatives[0]["dispersion"]
     assert missing["missing_supplied_fields"] == 1
     assert missing["residuals"]["pgf"]["catalogue"] is None
@@ -132,6 +133,7 @@ def test_dual_dispersion_uses_maximum_residual_not_double_counting():
     ]
     result = match_prescription(prescription(surface), catalogue)
     assert result.prescription.surfaces[0].material == "BALANCED"
+    assert result.matches[0].selected["catalogue_dpgf"] == "0.0106"
     assert (
         result.matches[0].selected["dispersion"]["maximum_normalized_residual"] == "6"
     )
@@ -168,6 +170,7 @@ def test_unknown_and_conflicting_supplied_typecodes_are_preserved():
     unknown = match_prescription(prescription(replace(supplied, material="HOST")), [])
     assert unknown.matches[0].status == "supplied"
     assert "host lookup unverified" in unknown.matches[0].reason
+    assert result.matches[0].selected["catalogue_dpgf"] is None
 
 
 @pytest.mark.parametrize(

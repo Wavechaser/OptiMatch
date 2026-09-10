@@ -1,7 +1,7 @@
 # Desired features
 
-Status: validated JSON/CSV inputs, deterministic glass matching and its
-CSV/JSON report CLI are implemented. ZMX output and OCR below remain planned.
+Status: validated JSON/CSV inputs, deterministic glass matching, CSV/ZMX output,
+and the JSON report CLI are implemented. OCR below remains planned.
 Engineering decisions and delivery checkpoints belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).

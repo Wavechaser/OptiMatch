@@ -1,6 +1,6 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
-Status: implementation authorized, 2026-09-10. C1/C2 complete; C3 next.
+Status: C1, C2, and C3 implemented and independently reviewed, 2026-09-10.
 This plan applies the plan-work structure with three small implementation commits.
 Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
 lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
@@ -19,7 +19,8 @@ Accept future OCR results through the same structured input contract.
 
 Implement one package with ordinary functions and small dataclasses: `models.py`
 for records, `inputs.py` for loading/validation, `matching.py` for selection,
-`export.py` for CSV/ZMX and solve inference, and `__main__.py` for argparse.
+`export.py` for CSV/ZMX, `solves.py` for solve resolution/inference, and
+`__main__.py` for argparse.
 Split modules further only if an implemented responsibility requires it. No
 framework, database, plugin registry, service, GUI, or optimization engine.
 
@@ -183,16 +184,16 @@ every dependent-thickness adjustment. If precision is unknown or an explicit
 constraint conflicts beyond rounding, keep the data and flag the candidate.
 Never serialize THIC and an independent thickness solve for the same cell.
 
-### Baseline and open questions
+### Original baseline and resolved host questions
 
-The current baseline is an installed flat package, one installation smoke test,
-Ruff checks, and intact samples. There are no pre-existing matcher behavior tests.
-Before enabling offset export, verify GLAS mode and trailing offset ordering in
-OpticStudio; unknown flags stay as tested template values. Confirm omission of
-apertures and zero-valued vignetting behavior there as well. Use the supplied
-catalogue CSV headers as the initial catalogue contract. Optical-policy changes belong to the user;
-record any material change here before implementing it. These questions do not
-block input validation or pure matching tests.
+The starting baseline was an installed flat package, one installation smoke test,
+Ruff checks, and intact samples, without matcher behavior tests. C3 verified GLAS
+mode and offset order, omitted apertures, neutral vignetting, asphere mappings,
+and configuration/solve behavior in OpticStudio 2023 R1.00; evidence is retained
+in ZMX_SYNTAX.md. Unknown flags remain tested template values, not decoded fields.
+The supplied catalogue CSV headers define the initial catalogue contract.
+Optical-policy changes belong to the user; record material changes here before
+implementation. Other OpticStudio versions remain unverified.
 
 ## Investigation and regression map
 
@@ -229,7 +230,7 @@ acceptance gate. No OCR/XLSX/AGF/database work enters these populations.
 |---|---|---|---|---|
 | C1 | Validated prescription/catalogue records and faithful CSV round trip | Baseline | Sample sections, numeric grammar and diagnostics | complete |
 | C2 | Deterministic preference-aware glass choices and report | C1 | Gates, profiles, offsets and unresolved outcomes | complete |
-| C3 | Usable ZMX export, configurations and eligible solves | C2 | Sag/equation checks and OpticStudio load/trace | pending |
+| C3 | Usable ZMX export, configurations and eligible solves | C2 | Sag/equation checks and OpticStudio load/trace | complete |
 
 ## Detailed checkpoints
 
@@ -319,6 +320,9 @@ geometry serializer readable, `__main__.py`, exporter/solve/CLI tests, and
 README/FEATURES/ZMX_SYNTAX. Input-contract corrections required by these direct
 consumers remain guarded by the full C1 suite. The parent retains shared plan
 ownership and runs actual OpticStudio checks on final generated artifacts.
+The selected-catalogue diagnostic in `matching.py` additionally exposes known
+`catalogue_dpgf` for GLAS serialization; this additive field avoids a duplicate
+catalogue lookup and retains all C2 ranking behavior, guarded by its full tests.
 
 Use explicit first OBJ and last IMG surfaces; fail on absent/misplaced endpoints
 instead of inventing geometry or shifting references. Source IDs map by sequence,
@@ -336,6 +340,13 @@ physical explanations. Other competing or overlapping inferred dependencies
 remain unresolved. Explicit constraints take precedence and are checked against
 every configuration before emission. Report rejected/conflicting candidates and
 all nonzero dependent adjustments, without altering the transcription.
+An explicit total with all independent terms known may determine a missing
+dependent thickness; report that value as derived, not transcribed. Resolve
+explicit constraints in increasing dependent-surface order so any supported
+chain's downstream diagnostics reflect its actual upstream solved values.
+Missing independent terms, duplicate/conflicting definitions, and backward
+references must never be guessed. This is direct TCOM/TOLE arithmetic, not a
+general expression evaluator or inference from missing data.
 
 **Acceptance criteria.** Every requested configuration resolves; even/odd sag
 matches its input expression; offsets affect the intended quantity; source and
@@ -376,9 +387,11 @@ diff for scope expansion. Do not claim OCR accuracy or ray-trace performance:
 neither has been benchmarked. Unverified host behavior keeps C3 open even when
 Python tests pass. Checkpoint tests alone do not replace this end-to-end sweep.
 
-## Resumption block
+## Delivery record
 
-- Current checkpoint: C1 committed as `47d79bd`; C2 complete, C3 next.
+- Integrated directly on `main`: C1 `47d79bd`, C2 `12ef54c`; C3 is the commit
+  containing this completion record (`feat(export): write ZMX study models and
+  thickness solves`). No task branches or worktrees were created; no push.
 - C1 evidence: 40 tests pass, Ruff lint/format and diff checks pass. Fresh
   independent GPT-5.6 review approved corrected reference resolution, CSV column
   validation, malformed-type diagnostics, and normalization/stop round trips.
@@ -390,14 +403,22 @@ Python tests pass. Checkpoint tests alone do not replace this end-to-end sweep.
   smoke on the synthetic host study with the supplied catalogue matched both
   materials with zero unresolved outcomes. Default/Canon/Nikon tests encode the
   user's labelled preferences; historical sample offsets are not ranking goldens.
-- Next action: implement C3 export/solves, then run actual generated files through
-  OpticStudio. Prototype host checks are recorded separately in ZMX_SYNTAX.
+- C3 evidence: all 96 tests pass, Ruff lint/format, pip check and diff checks pass.
+  Independent read-only review approved the final exporter and solve corrections,
+  including ordered explicit chains, aperture inheritance and base-only derived
+  distances. No existing tests were retired. Five generated control files passed
+  actual OpticStudio 2023 R1.00 inspection and ray traces across 12 configurations;
+  independent source-based sag checks covered all three asphere families.
+  Detailed quantities are in ZMX_SYNTAX.md; generated probes remain ignored in
+  `output/`. Samples are byte-for-byte unchanged from `ed91cf6`.
 - Commands: `.\.venv\Scripts\python.exe -m pytest`,
   `.\.venv\Scripts\python.exe -m ruff check .`,
   `.\.venv\Scripts\python.exe -m ruff format --check .`,
   `.\.venv\Scripts\python.exe -m pip check`, `git diff --check`.
-- Open decisions: settle proposed ranking against labelled examples; validate
-  remaining ZMX host behavior before closing C3.
+- Remaining limitations: ranking is a study heuristic, not a production-material
+  identification claim; further labelled examples can refine it. Runtime reports
+  do not imply host validation of arbitrary exports. OCR is deferred; XLSX, AGF,
+  and database parsing remain excluded. No acceptance blocker remains.
 - Preserve samples byte-for-byte and unrelated user work. Do not use sample
   saved numeric tails as source precision metadata.
 - Return for review if the required surface family is unsupported, a proposed
