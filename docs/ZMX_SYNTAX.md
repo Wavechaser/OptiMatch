@@ -194,6 +194,8 @@ The controlled API save after selecting configuration 3 produced `MNUM 3 3`,
 confirming the second field. Configuration records share this observed shape:
 
 ```text
+LTTL 0       configuration "title" 0 0 0 1 1 0 0.0 "" 0
+MOFF 0       configuration ""      0 0 0 1 1 0 0.0 "" 0
 THIC surface configuration value 0 0 0 1 1 1 0 0 "" 0
 APER 0       configuration value 0 0 0 1 1 1 0 0 "" 0
 FVCY field   configuration value 0 0 0 1 1 1 0 0 "" 0
@@ -213,9 +215,29 @@ definition, so its value must not universally be interpreted as a diameter or
 f-number. `FVCY` and `FVDY` supply y-field vignetting compression and decenter.
 Their long trailing payloads are observed metadata, not decoded flags.
 
+The exporter writes operand-major nonempty sections in this order: `LTTL`, a
+varying object `THIC`, varying independent lens `THIC` operands, `APER` when
+configured, then each non-axial field's `FVCY` and `FVDY` pair. It puts one
+`MOFF` operand after each nonempty section, including the last. Supplied
+configuration names become quoted `LTTL` values; a prescription without
+configurations receives a blank single `LTTL`. No escaping syntax has been
+verified, so titles containing a quote, control character, or DEL are rejected.
+Fixed and solve-controlled thicknesses remain in `DISZ`, not the
+multi-configuration table.
+
+2026-09-11 host control (`output/f2_host_evidence.json`, OpticStudio 2023 R1.00):
+two configurations loaded and saved/reloaded with 14 MCE operands in the requested
+section order, titles `far`/`near`, and only the varying object and lens thickness
+rows. FVCY/FVDY stayed zero and alternated for fields 2 and 3; no axial row was
+created. **ZOS-API MCE `Param1` is zero-based for these field operands**, unlike
+their one-based ZMX field number. A control set the API row with Param1=1 to
+0.123 and verified that only system field 2's VCY changed, then restored zero.
+Do not mistake this API indexing difference for a serialization defect.
+
 Create `FVCY`/`FVDY` entries with numeric zero for applicable field/configuration
-slots: this representation of the user's requested empty fields was verified
-by the 2023 R1.00 minimal-header probe. Do not inherit sample vignetting values. `THIC` can come
+slots, excluding every numerically zero field: this representation of the user's
+requested empty fields was verified by the 2023 R1.00 minimal-header probe. Do
+not inherit sample vignetting values. `THIC` can come
 from supplied distances or documented calculations; do not derive a focus
 distance from insufficient patent information. The samples use `1e10` for an
 effectively infinite object distance. Use `1e10` in an object-distance THIC

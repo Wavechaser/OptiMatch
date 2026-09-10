@@ -66,6 +66,8 @@ def test_render_zmx_is_utf16_bom_and_uses_verified_core_records():
     assert "VERS 221221 730 20120530 20120530" in text
     assert "UNIT MM X W X CM MR CPMM" in text
     assert "FNUM 4 1" in text and "FTYP 0 0 2 1 0 0 0 2" in text
+    assert 'LTTL 0 1 "" 0 0 0 1 1 0 0.0 "" 0' in text
+    assert "FVCY 1 1 0" not in text and "FVCY 2 1 0" in text
     assert "DIAM" not in text and "MEMA" not in text and "GCAT" not in text
     assert " None " not in text
     assert report["zmx"]["surface_map"] == {"OBJ": 0, "1": 1, "2": 2, "IMG": 3}
@@ -255,14 +257,71 @@ def test_configuration_records_are_operand_major_and_infinity_is_numeric():
         Configuration("near", {"OBJ": "100", "2": "12"}, "5"),
     )
     text = render_zmx(result(configurations=configurations))[0].decode("utf-16")
+    lines = text.splitlines()
+    assert "THIC 1 1 2" not in text
     assert (
-        text.index("THIC 0 1 1e10")
-        < text.index("THIC 0 2 100")
-        < text.index("THIC 1 1 2")
+        lines.index('THIC 0 1 1e10 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('THIC 0 2 100 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('THIC 2 1 10 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('THIC 2 2 12 0 0 0 1 1 1 0 0 "" 0')
     )
+    assert "FVCY 1 1 0" not in text
     assert (
-        text.index("APER 0 1 4") < text.index("APER 0 2 5") < text.index("FVCY 1 1 0")
+        lines.index('FVCY 2 1 0 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('FVCY 2 2 0 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('FVDY 2 1 0 0 0 0 1 1 1 0 0 "" 0')
+        < lines.index('FVDY 2 2 0 0 0 0 1 1 1 0 0 "" 0')
     )
+    assert lines[-1] == 'MOFF 0 2 "" 0 0 0 1 1 0 0.0 "" 0'
+
+
+def test_multi_configuration_sections_and_titles_are_compact():
+    configurations = (
+        Configuration("far", {"OBJ": "infinity", "2": "10", "3": "20"}, "4"),
+        Configuration("near", {"OBJ": "100", "2": "12", "3": "21"}, "5"),
+    )
+    base = result(configurations=configurations)
+    surfaces = (
+        *base.prescription.surfaces[:-1],
+        Surface("3", "0", "20"),
+        base.prescription.surfaces[-1],
+    )
+    changed = replace(base, prescription=replace(base.prescription, surfaces=surfaces))
+    lines = render_zmx(changed)[0].decode("utf-16").splitlines()
+    start = lines.index("MNUM 2 1") + 1
+    records = lines[start:]
+    assert records[:6] == [
+        'LTTL 0 1 "far" 0 0 0 1 1 0 0.0 "" 0',
+        'LTTL 0 2 "near" 0 0 0 1 1 0 0.0 "" 0',
+        'MOFF 0 1 "" 0 0 0 1 1 0 0.0 "" 0',
+        'MOFF 0 2 "" 0 0 0 1 1 0 0.0 "" 0',
+        'THIC 0 1 1e10 0 0 0 1 1 1 0 0 "" 0',
+        'THIC 0 2 100 0 0 0 1 1 1 0 0 "" 0',
+    ]
+    second_thickness = records.index('THIC 2 2 12 0 0 0 1 1 1 0 0 "" 0')
+    assert records[second_thickness + 1] == 'THIC 3 1 20 0 0 0 1 1 1 0 0 "" 0'
+    assert records[-2:] == [
+        'MOFF 0 1 "" 0 0 0 1 1 0 0.0 "" 0',
+        'MOFF 0 2 "" 0 0 0 1 1 0 0.0 "" 0',
+    ]
+
+
+@pytest.mark.parametrize("name", ['bad"quote', "bad\nline", "bad\x7fcontrol"])
+def test_multi_configuration_title_rejects_unsupported_zmx_text(name):
+    base = result(
+        configurations=(
+            Configuration(name, {"2": "10"}),
+            Configuration("valid", {"2": "12"}),
+        )
+    )
+    with pytest.raises(ValueError, match="configuration title"):
+        render_zmx(base)
+
+
+def test_single_explicit_configuration_keeps_its_title():
+    base = result(configurations=(Configuration("near", {"2": "12"}),))
+    text = render_zmx(base)[0].decode("utf-16")
+    assert 'LTTL 0 1 "near" 0 0 0 1 1 0 0.0 "" 0' in text
 
 
 def test_partial_configuration_aperture_inherits_explicit_base_value():

@@ -130,6 +130,8 @@ _FIELD_PRESET_TYPES = {
     **{name: "real_image_height" for name in FIELD_PRESETS if name != "fisheye"},
     "fisheye": "angle",
 }
+_MCE_TAIL = '0 0 0 1 1 1 0 0 "" 0'
+_MCE_LABEL_TAIL = '0 0 0 1 1 0 0.0 "" 0'
 _DEFAULT_WAVELENGTHS = tuple(
     Wavelength(value, weight, index == 2)
     for index, (value, weight) in enumerate(
@@ -221,6 +223,29 @@ def _curvature(radius: str) -> str:
         if abs(recovered - Decimal(radius)) > tolerance:
             raise ValueError(f"radius {radius}: curvature reciprocal lost precision")
         return rendered
+
+
+def _mce_records(
+    keyword: str, operand: int, values: tuple[str, ...], tail: str
+) -> list[str]:
+    return [
+        f"{keyword} {operand} {index} {value} {tail}"
+        for index, value in enumerate(values, 1)
+    ]
+
+
+def _mce_title(name: str) -> str:
+    if '"' in name or any(ord(char) < 32 or ord(char) == 127 for char in name):
+        raise ValueError("configuration title contains unsupported ZMX text")
+    return f'"{name}"'
+
+
+def _mce_thickness(value: str) -> str:
+    return "1e10" if value.casefold() in {"infinity", "∞"} else value
+
+
+def _mce_values_vary(values: tuple[str, ...]) -> bool:
+    return len({Decimal(value) for value in values}) > 1
 
 
 def _safe_token(text: str, context: str) -> str:
@@ -448,38 +473,69 @@ def render_zmx(
                 f"  GLAS {token} {mode} 0 {nd} {vd} {dpgf} 0 0 0 "
                 f"{surface.nd_offset or '0'} {surface.vd_offset or '0'}"
             )
-    lines.append(f"MNUM {len(prescription.configurations) or 1} 1")
-    if prescription.configurations:
-        tail = '0 0 0 1 1 1 0 0 "" 0'
-        for surface_id in solves.values[0]:
-            if surface_id not in dependent:
-                for config_index, values in enumerate(solves.values, 1):
-                    value = values[surface_id]
-                    lines.append(
-                        f"THIC {ids[surface_id]} {config_index} {value} {tail}"
-                    )
-        if any(item.aperture is not None for item in prescription.configurations):
-            for config_index, configuration in enumerate(
-                prescription.configurations, 1
-            ):
+    configurations = prescription.configurations
+    count = len(configurations) or 1
+    lines.append(f"MNUM {count} 1")
+    sections: list[list[str]] = [
+        _mce_records(
+            "LTTL",
+            0,
+            (
+                tuple(
+                    _mce_title(configuration.name) for configuration in configurations
+                )
+                if configurations
+                else ('""',)
+            ),
+            _MCE_LABEL_TAIL,
+        )
+    ]
+    if configurations:
+        object_values = tuple(
+            _mce_thickness(values[prescription.surfaces[0].source_id])
+            for values in solves.values
+        )
+        if _mce_values_vary(object_values):
+            sections.append(_mce_records("THIC", 0, object_values, _MCE_TAIL))
+        thickness_records: list[str] = []
+        for surface in prescription.surfaces[1:-1]:
+            if surface.source_id in dependent:
+                continue
+            values = tuple(
+                _mce_thickness(configuration[surface.source_id])
+                for configuration in solves.values
+            )
+            if _mce_values_vary(values):
+                thickness_records.extend(
+                    _mce_records("THIC", ids[surface.source_id], values, _MCE_TAIL)
+                )
+        if thickness_records:
+            sections.append(thickness_records)
+        if any(item.aperture is not None for item in configurations):
+            apertures = []
+            for configuration in configurations:
                 aperture = configuration.aperture or system.aperture_value
                 assert aperture is not None
                 if Decimal(aperture) < 0:
                     raise ValueError(
                         f"configuration {configuration.name}: aperture must be nonnegative"
                     )
-                lines.append(f"APER 0 {config_index} {aperture} {tail}")
-        for field_index in range(1, len(system.fields) + 1):
-            for config_index in range(1, len(prescription.configurations) + 1):
-                lines.append(f"FVCY {field_index} {config_index} 0 {tail}")
-        for field_index in range(1, len(system.fields) + 1):
-            for config_index in range(1, len(prescription.configurations) + 1):
-                lines.append(f"FVDY {field_index} {config_index} 0 {tail}")
-    else:
-        tail = '0 0 0 1 1 1 0 0 "" 0'
-        for field_index in range(1, len(system.fields) + 1):
-            lines.append(f"FVCY {field_index} 1 0 {tail}")
-            lines.append(f"FVDY {field_index} 1 0 {tail}")
+                apertures.append(aperture)
+            sections.append(_mce_records("APER", 0, tuple(apertures), _MCE_TAIL))
+    vignetting_records: list[str] = []
+    for field_index, field in enumerate(system.fields, 1):
+        if Decimal(field) == 0:
+            continue
+        values = tuple("0" for _ in range(count))
+        vignetting_records.extend(_mce_records("FVCY", field_index, values, _MCE_TAIL))
+        vignetting_records.extend(_mce_records("FVDY", field_index, values, _MCE_TAIL))
+    if vignetting_records:
+        sections.append(vignetting_records)
+    for section in sections:
+        lines.extend(section)
+        lines.extend(
+            _mce_records("MOFF", 0, tuple('""' for _ in range(count)), _MCE_LABEL_TAIL)
+        )
     if Decimal(system.aperture_value) == 0 or any(
         item.aperture is not None and Decimal(item.aperture) == 0
         for item in prescription.configurations

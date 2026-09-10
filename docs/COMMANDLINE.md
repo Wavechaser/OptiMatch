@@ -103,11 +103,18 @@ described below. Explicit wavelengths/weights must be positive.
 It writes UTF-16 LE with a BOM and preserves source coefficients. Source distances
 remain in CSV/report; ZMX applies disclosed solve adjustments and derivations.
 It supports ordinary/extended even and extended odd aspheres, omits fixed aperture
-records and GCAT, and emits neutral vignetting configuration operands. Configured
-infinite object distance uses the tested numeric `1e10` representation and is
+records and GCAT, and emits compact operand-major configuration records with
+neutral off-axis y-field vignetting operands. Configured infinite object distance
+uses the tested numeric `1e10` representation and is
 disclosed in the report. Unknown supplied typecodes remain visibly
 host-lookup-unverified; the report does not claim that a particular output was
 loaded by OpticStudio.
+
+For multi-configuration ZMX output, optimatch emits quoted supplied titles,
+only independently varying thickness operands, optional aperture operands, and
+paired off-axis `FVCY`/`FVDY` operands. Records are operand-major and use `MOFF`
+separators between nonempty sections; zero-valued axial fields, fixed distances,
+and solve-controlled distances do not enter the table.
 
 ### Setup defaults and field presets
 
@@ -342,3 +349,41 @@ optional). This smaller project uses a flat package layout and adds Ruff. It doe
 need NamiSync's layered architecture, departmental testing, checkpoint ledgers,
 or agent permission configuration. No hooks or separate agent configuration
 directories are needed at present.
+
+## OpticStudio host validation on Windows
+
+Verified 2026-09-11 with the installed **OpticStudio 2023 R1.00** at
+`C:\Program Files\Ansys Zemax OpticStudio 2023 R1.00`:
+
+- Run ZOS-API scripts with **Windows PowerShell (`powershell.exe`)**, whose
+  .NET Framework runtime supports this host. Continue using PowerShell 7 for
+  ordinary repository work. Running this host from `pwsh` failed at
+  `CreateNewApplication()` with missing
+  `System.Runtime.Remoting.Activation.UrlAttribute` in `mscorlib`.
+- A sandboxed standalone launch reported `IsValidLicenseForAPI = false`.
+  The same read-only probe succeeded outside the sandbox using Windows
+  PowerShell. This is an observed environment workaround, not evidence that
+  every licence failure is sandbox-related. Request the permitted execution
+  escalation rather than repeatedly retrying or changing licence settings.
+- Load `ZOSAPI_NetHelper.dll`, initialize the installation, then load
+  `ZOSAPI_Interfaces.dll` and `ZOSAPI.dll`. Use
+  `ZOSAPI_Connection.CreateNewApplication()`, check the returned application and
+  `IsValidLicenseForAPI`, and call `CloseApplication()` in `finally`.
+- Never attach to or close the user's active OpticStudio session. Load reference
+  files read-only and use a distinct generated path for `SaveAs`; never overwrite
+  samples. Do not kill user processes to recover a licence.
+
+For an existing task-owned probe (generated scripts are ignored, not shipped):
+
+```powershell
+powershell.exe -NoProfile -File output/host_fixes_probe.ps1
+```
+
+The successful probe used an approved outside-sandbox execution and recorded
+`appMode: Server`, three configurations and 20 MCE operands in
+`output/host_fixes_probe_evidence.json`. These local artifacts may not exist in a
+fresh checkout; follow the runtime/lifecycle instructions above when creating a
+new probe. Host validation requires actual load/save/reload assertions, not just
+successful API initialization. If the Framework/outside-sandbox combination still
+fails, retain the exact exception or licence state and report the host gate open;
+do not claim validation or keep cycling through runtimes.

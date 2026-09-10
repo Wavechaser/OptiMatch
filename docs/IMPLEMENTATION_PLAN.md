@@ -25,7 +25,7 @@ review before each task-authorized commit. Samples and catalogue are protected.
 | ID | Accepted outcome | Dependency | Gate | Status |
 | --- | --- | --- | --- | --- |
 | F1 | Typed fisheye preset, CLI and metadata | — | Units, precedence, header and CLI tests | Complete |
-| F2 | Compact ordered multi-configuration operands | — | Operand sequence tests and host inspection | Pending |
+| F2 | Compact ordered multi-configuration operands | — | Operand sequence tests and host inspection | Complete |
 | F3 | Independent solves survive redundant constant spans | — | Two-pair regression and genuine ambiguity tests | Pending |
 | F4 | Export-only rear dummy separates movement and back focus | F3 | Coordinates, equations, mapping and host evidence | Pending |
 
@@ -84,9 +84,18 @@ a CLI-over-metadata precedence regression. Fresh-agent creation hit the tool
 thread limit; user authorized separate-role reuse. F1 is the commit titled
 `feat(export): add fisheye field preset`.
 
-Resumption: F1 complete; F2/F3/F4 pending. Baseline command used
+F2 evidence: 57 focused exporter/CLI and 180 combined tests pass; independent
+review approved. OpticStudio 2023 R1.00 loaded/saved/reloaded the 14-row two-config
+control (`output/f2_host_evidence.json`), confirming section order, titles, fixed
+thickness omission and neutral off-axis vignetting pairs. A field perturbation
+confirmed API-zero-based versus ZMX-one-based operand indexing. User requested
+durable host guidance: COMMANDLINE now records successful outside-sandbox Windows
+PowerShell invocation and failure signatures, with an AGENTS pointer. F2 is the
+commit titled `fix(export): organize multi-configuration operands`.
+
+Resumption: F1/F2 complete; F3 review and F4 pending. Baseline command used
 `-m pytest -q -p no:cacheprovider --basetemp output/pytest_fixes_baseline` (162 pass).
-Next: F2 implementation; F3 independent source/test-only builder. Shared plan edits belong
+Next: F3 review closure and F4 implementation. Shared plan edits belong
 to the orchestrator; product edits are serialized. No unresolved scope decision.
 
 ### Previous catalogue delivery

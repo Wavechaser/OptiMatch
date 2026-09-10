@@ -98,6 +98,9 @@ the materials or tolerances of production lenses.
   prescriptions exceeding the ordinary even coefficient capacity.
 - Retain supplied configurations and calculate configuration distances when the
   patent provides enough information to determine them.
+- Keep ZMX multi-configuration tables compact: title, varying independent
+  thicknesses, optional apertures, and paired off-axis vignetting operands;
+  fixed and solve-controlled thicknesses stay in the base prescription.
 - Create eligible thickness compensator or position solves for stated or clearly
   supported constant-distance relationships. Accommodate source rounding where
   justified, disclose adjusted distances, and preserve explicit configuration

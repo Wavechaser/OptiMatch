@@ -44,6 +44,11 @@ Keep runtime dependencies minimal and add optional OCR/Office dependencies only
 when their features are implemented. Use pytest and Ruff; see docs/COMMANDLINE.md
 for commands.
 
+For OpticStudio/ZOS-API host validation, read the Windows host-validation section
+of `docs/COMMANDLINE.md` first. This installed host requires Windows PowerShell
+(`powershell.exe`), not PowerShell 7; sandboxed API licence failures may be
+environmental. Use only a new standalone application and close it in `finally`.
+
 Read the relevant code and samples before editing. Make surgical changes and
 preserve unrelated user work. Verify behavior with focused tests, then run the
 project checks. Before completion, review for requirement drift, numerical or
