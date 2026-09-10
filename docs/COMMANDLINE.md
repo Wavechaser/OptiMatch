@@ -263,6 +263,18 @@ infer solves. ZMX export resolves explicit constraints and conservatively infers
 eligible constant-distance relationships across configurations. Original distances
 remain in CSV; the report records derived values and rounding adjustments.
 
+Inference retains independent local compensators even when a longer constant
+span combines them. It removes invariant contributions and previously accepted
+constant relationships before comparing candidates, then prefers fewer varying
+terms, fewer serialized terms, and an equivalent compensator over a position
+solve. Genuine competing or shared-varying dependencies remain ambiguous. If a
+provisional inferred relationship is rejected for overlap, downstream decisions
+are recomputed without it. Explicit solves retain precedence. Candidate
+diagnostics identify kind, reference/dependent surface IDs, total (null when no
+defensible total exists), and the rejection/redundancy/ambiguity reason. Existing
+rounding-precision gates still apply; extra trailing zeros are not proof of
+measurement accuracy.
+
 For example, a `system` object can supply the remaining ZMX essentials:
 
 ```json

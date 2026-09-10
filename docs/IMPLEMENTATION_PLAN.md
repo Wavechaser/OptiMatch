@@ -26,7 +26,7 @@ review before each task-authorized commit. Samples and catalogue are protected.
 | --- | --- | --- | --- | --- |
 | F1 | Typed fisheye preset, CLI and metadata | — | Units, precedence, header and CLI tests | Complete |
 | F2 | Compact ordered multi-configuration operands | — | Operand sequence tests and host inspection | Complete |
-| F3 | Independent solves survive redundant constant spans | — | Two-pair regression and genuine ambiguity tests | Pending |
+| F3 | Independent solves survive redundant constant spans | — | Two-pair regression and genuine ambiguity tests | Complete |
 | F4 | Export-only rear dummy separates movement and back focus | F3 | Coordinates, equations, mapping and host evidence | Pending |
 
 F1 adds angle fields 0, 18, 36, 54, 72, 89 degrees without length scaling.
@@ -93,9 +93,18 @@ durable host guidance: COMMANDLINE now records successful outside-sandbox Window
 PowerShell invocation and failure signatures, with an AGENTS pointer. F2 is the
 commit titled `fix(export): organize multi-configuration operands`.
 
-Resumption: F1/F2 complete; F3 review and F4 pending. Baseline command used
+F3 evidence: 17 focused solve tests and 180 combined tests pass. Both independent
+Sigma totals (18.1200 and 10.8000) survive wider redundant spans; reversed configs,
+explicit prior constraints, equivalent numeric spelling, and genuine overlapping
+dependencies are covered. Independent review caught provisional equations being
+used after overlap rejection; a concrete five-variable regression now proves
+bounded recomputation removes that influence. Reviewer approved the correction.
+Ruff, pip and diff checks pass. F3 is the commit titled `fix(solves): retain
+independent compensator relationships`.
+
+Resumption: F1/F2/F3 complete; F4 pending. Baseline command used
 `-m pytest -q -p no:cacheprovider --basetemp output/pytest_fixes_baseline` (162 pass).
-Next: F3 review closure and F4 implementation. Shared plan edits belong
+Next: F4 implementation and final combined host checks. Shared plan edits belong
 to the orchestrator; product edits are serialized. No unresolved scope decision.
 
 ### Previous catalogue delivery

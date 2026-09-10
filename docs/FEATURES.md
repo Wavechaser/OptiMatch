@@ -105,6 +105,8 @@ the materials or tolerances of production lenses.
   supported constant-distance relationships. Accommodate source rounding where
   justified, disclose adjusted distances, and preserve explicit configuration
   data when a relationship is uncertain.
+- Retain multiple independent thickness relationships without treating longer
+  spans that merely combine them as competing explanations.
 - Initialize y-field vignetting quantities and offsets to zero. Leave per-surface
   clear and mechanical apertures unset rather than copy them from reference
   lenses.

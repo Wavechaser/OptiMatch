@@ -160,7 +160,13 @@ def _candidate(
     indexes: list[int],
     kind: str,
 ) -> tuple[
-    tuple[ResolvedSolve, list[str], tuple[tuple[str, ...], Decimal]] | None,
+    tuple[
+        ResolvedSolve,
+        list[str],
+        tuple[tuple[str, ...], Decimal],
+        int,
+    ]
+    | None,
     str | None,
 ]:
     surfaces = prescription.surfaces
@@ -192,14 +198,14 @@ def _candidate(
         target = min(max(median, lower), upper)
     invariant = [
         index
-        for index, column in zip(indexes[:-1], columns[:-1], strict=True)
+        for index, column in zip(indexes, columns, strict=True)
         if len(set(column)) == 1
     ]
     normalized_total = target - sum(
         (columns[indexes.index(item)][0] for item in invariant), Decimal()
     )
     varying = tuple(
-        surfaces[index].source_id for index in indexes[:-1] if index not in invariant
+        surfaces[index].source_id for index in indexes if index not in invariant
     )
     solve = ResolvedSolve(
         kind,
@@ -211,18 +217,52 @@ def _candidate(
         solve,
         [str(target - total) for total in totals],
         (varying, normalized_total),
+        len(indexes),
     ), None
+
+
+def _candidate_identity(solve: ResolvedSolve) -> dict[str, object]:
+    return {
+        "kind": solve.kind,
+        "reference_surface_id": solve.reference_surface_id,
+        "surface_id": solve.surface_id,
+        "total": solve.total,
+    }
+
+
+def _normalize_equation(
+    equation: tuple[tuple[str, ...], Decimal],
+    prior: list[tuple[tuple[str, ...], Decimal]],
+) -> tuple[tuple[str, ...], Decimal]:
+    terms, total = equation
+    remaining = list(terms)
+    for prior_terms, prior_total in prior:
+        if all(term in remaining for term in prior_terms):
+            for term in prior_terms:
+                remaining.remove(term)
+            total -= prior_total
+    return tuple(remaining), total
 
 
 def _infer_solves(
     prescription: Prescription,
     values: tuple[dict[str, str], ...],
     excluded: set[str],
+    prior_equations: list[tuple[tuple[str, ...], Decimal]] | None = None,
+    explicit_terms: set[str] | None = None,
 ) -> tuple[list[ResolvedSolve], list[dict[str, object]]]:
     if len(values) < 2:
         return [], []
     candidates: dict[
-        str, list[tuple[ResolvedSolve, list[str], tuple[tuple[str, ...], Decimal]]]
+        str,
+        list[
+            tuple[
+                ResolvedSolve,
+                list[str],
+                tuple[tuple[str, ...], Decimal],
+                int,
+            ]
+        ],
     ] = {}
     diagnostics: list[dict[str, object]] = []
     surfaces = prescription.surfaces
@@ -242,6 +282,8 @@ def _infer_solves(
                         "surface_id": second.source_id,
                         "status": "rejected",
                         "kind": "complementary_gap",
+                        "reference_surface_id": first.source_id,
+                        "total": None,
                         "reason": reason,
                     }
                 )
@@ -260,32 +302,75 @@ def _infer_solves(
                         "surface_id": surfaces[right].source_id,
                         "status": "rejected",
                         "kind": "constant_span",
+                        "reference_surface_id": surfaces[left].source_id,
+                        "total": None,
                         "reason": reason,
                     }
                 )
     accepted: list[ResolvedSolve] = []
+    accepted_equations = list(prior_equations or [])
+    equations_by_dependent: dict[str, tuple[tuple[str, ...], Decimal]] = {}
     config_names = [item.name for item in prescription.configurations]
-    for dependent, choices in candidates.items():
+    surface_order = {surface.source_id: index for index, surface in enumerate(surfaces)}
+    for dependent, choices in sorted(
+        candidates.items(), key=lambda item: surface_order[item[0]]
+    ):
         if dependent in excluded:
             continue
         unique: dict[
-            tuple[tuple[str, ...], Decimal], tuple[ResolvedSolve, list[str]]
+            tuple[tuple[str, ...], Decimal],
+            tuple[ResolvedSolve, list[str], tuple[tuple[str, ...], Decimal], int],
         ] = {}
-        for solve, adjustments, equation in choices:
-            previous = unique.get(equation)
-            if previous is None or solve.kind == "complementary_gap":
-                unique[equation] = (solve, adjustments)
-        if len(unique) != 1:
+        for choice in choices:
+            solve, adjustments, equation, term_count = choice
+            normalized = _normalize_equation(equation, accepted_equations)
+            previous = unique.get(normalized)
+            rank = (len(equation[0]), term_count, solve.kind != "complementary_gap")
+            if previous is None:
+                unique[normalized] = choice
+                continue
+            previous_rank = (
+                len(previous[2][0]),
+                previous[3],
+                previous[0].kind != "complementary_gap",
+            )
+            if rank < previous_rank:
+                redundant = previous[0]
+                unique[normalized] = choice
+            else:
+                redundant = solve
             diagnostics.append(
-                {
-                    "surface_id": dependent,
+                _candidate_identity(redundant)
+                | {
+                    "status": "redundant",
+                    "reason": "equivalent to a smaller inferred relationship",
+                }
+            )
+        if len(unique) != 1:
+            diagnostics.extend(
+                _candidate_identity(choice[0])
+                | {
                     "status": "ambiguous",
                     "reason": "multiple inferred relationships",
                 }
+                for choice in unique.values()
             )
             continue
-        solve, adjustments = next(iter(unique.values()))
+        _, choice = next(iter(unique.items()))
+        solve, adjustments, equation, _ = choice
+        solve_terms = set(equation[0])
+        if solve_terms & (explicit_terms or set()):
+            diagnostics.append(
+                _candidate_identity(solve)
+                | {
+                    "status": "ambiguous",
+                    "reason": "inferred relationship overlaps an explicit constraint",
+                }
+            )
+            continue
         accepted.append(solve)
+        accepted_equations.append(equation)
+        equations_by_dependent[dependent] = equation
         diagnostics.append(
             {
                 "surface_id": dependent,
@@ -303,21 +388,10 @@ def _infer_solves(
                 ],
             }
         )
-    order = {surface.source_id: index for index, surface in enumerate(surfaces)}
-    terms_by_dependent: dict[str, set[str]] = {}
-    for solve in accepted:
-        if solve.kind == "complementary_gap":
-            terms_by_dependent[solve.surface_id] = {
-                solve.reference_surface_id,
-                solve.surface_id,
-            }
-        else:
-            terms_by_dependent[solve.surface_id] = {
-                item.source_id
-                for item in surfaces[
-                    order[solve.reference_surface_id] : order[solve.surface_id] + 1
-                ]
-            }
+    terms_by_dependent = {
+        dependent: set(equation[0])
+        for dependent, equation in equations_by_dependent.items()
+    }
     overlapping = {
         dependent
         for dependent, terms in terms_by_dependent.items()
@@ -327,23 +401,25 @@ def _infer_solves(
         )
     }
     if overlapping:
-        accepted = [item for item in accepted if item.surface_id not in overlapping]
-        diagnostics = [
-            item
-            for item in diagnostics
-            if not (
-                item.get("surface_id") in overlapping
-                and item.get("status") == "inferred"
-            )
-        ]
-        diagnostics.extend(
-            {
-                "surface_id": dependent,
+        overlapping_solves = {
+            item.surface_id: item for item in accepted if item.surface_id in overlapping
+        }
+        retained, stable_diagnostics = _infer_solves(
+            prescription,
+            values,
+            excluded | overlapping,
+            prior_equations,
+            explicit_terms,
+        )
+        stable_diagnostics.extend(
+            _candidate_identity(overlapping_solves[dependent])
+            | {
                 "status": "ambiguous",
                 "reason": "inferred relationship overlaps another dependency",
             }
             for dependent in sorted(overlapping)
         )
+        return retained, stable_diagnostics
     return accepted, diagnostics
 
 
@@ -365,8 +441,15 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
     for solve in ordered_solves:
         if counts[solve.surface_id] > 1:
             diagnostics.append(
-                {
-                    "surface_id": solve.surface_id,
+                _candidate_identity(
+                    ResolvedSolve(
+                        solve.kind,
+                        solve.surface_id,
+                        solve.reference_surface_id,
+                        solve.total,
+                    )
+                )
+                | {
                     "status": "ambiguous",
                     "reason": "multiple explicit solves",
                 }
@@ -463,35 +546,51 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
         )
         for config, solved in zip(values, solved_values, strict=True):
             config[solve.surface_id] = str(solved)
-    inferred, inferred_diagnostics = _infer_solves(
-        prescription, values, {item.surface_id for item in prescription.solves}
-    )
-    explicit_terms = {
-        item
-        for solve in accepted
-        for item in _terms(
+    explicit_equations: list[tuple[tuple[str, ...], Decimal]] = []
+    for solve in accepted:
+        terms = _terms(
             Solve(
                 solve.kind, solve.surface_id, solve.reference_surface_id, solve.total
             ),
             order,
             ids,
         )
-    }
+        varying = tuple(
+            item
+            for item in terms
+            if len({Decimal(config[item]) for config in values}) > 1
+        )
+        invariant_total = sum(
+            (Decimal(values[0][item]) for item in terms if item not in varying),
+            Decimal(),
+        )
+        explicit_equations.append((varying, Decimal(solve.total) - invariant_total))
+    explicit_terms = {item for equation, _ in explicit_equations for item in equation}
+    inferred, inferred_diagnostics = _infer_solves(
+        prescription,
+        values,
+        {item.surface_id for item in prescription.solves},
+        explicit_equations,
+        explicit_terms,
+    )
     safe_inferred: list[ResolvedSolve] = []
     for solve in inferred:
-        terms = set(
-            _terms(
-                Solve(
-                    solve.kind,
-                    solve.surface_id,
-                    solve.reference_surface_id,
-                    solve.total,
-                ),
-                order,
-                ids,
-            )
+        solve_terms = _terms(
+            Solve(
+                solve.kind,
+                solve.surface_id,
+                solve.reference_surface_id,
+                solve.total,
+            ),
+            order,
+            ids,
         )
-        if terms & explicit_terms:
+        varying_terms = {
+            item
+            for item in solve_terms
+            if len({Decimal(config[item]) for config in values}) > 1
+        }
+        if varying_terms & explicit_terms:
             inferred_diagnostics = [
                 item
                 for item in inferred_diagnostics
@@ -501,8 +600,8 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
                 )
             ]
             inferred_diagnostics.append(
-                {
-                    "surface_id": solve.surface_id,
+                _candidate_identity(solve)
+                | {
                     "status": "ambiguous",
                     "reason": "inferred relationship overlaps an explicit constraint",
                 }
