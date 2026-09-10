@@ -5,6 +5,17 @@ import pytest
 from optics_prescription_matcher.__main__ import main
 
 
+def test_cli_profile_choices_include_all_profiles_and_reject_unknown():
+    from optics_prescription_matcher.__main__ import _parser
+
+    help_text = _parser().format_help()
+    assert "{default,canon,nikon,sony,sigma,fujifilm}" in help_text
+    with pytest.raises(SystemExit):
+        _parser().parse_args(
+            ["input", "--catalog", "catalog", "--output", "out", "--profile", "unknown"]
+        )
+
+
 @pytest.mark.parametrize("via_metadata", [False, True])
 def test_cli_setup_defaults_and_zero_aperture_warning(tmp_path, capsys, via_metadata):
     source, catalog = write_inputs(tmp_path)

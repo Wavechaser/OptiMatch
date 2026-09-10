@@ -20,7 +20,7 @@ Accept future OCR results through the same structured input contract.
 | --- | --- | --- | --- | --- |
 | R0 | Organize the revised catalogue and record active policy | — | Data-only migration audit and baseline checks | Complete |
 | R1 | Accept the revised catalogue schema and scoped typecode normalization | R0 | Loader and compatibility tests | Complete |
-| R2 | Add profiles, PgF conversion, and asphere-driven molding preference | R1 | Boundary, ownership, and ranking tests | Pending |
+| R2 | Add profiles, PgF conversion, and asphere-driven molding preference | R1 | Boundary, ownership, and ranking tests | Complete |
 | R3 | Emit and validate model-glass fallbacks | R2 | Integrated CLI and OpticStudio checks | Pending |
 
 R0 moves the maintained CSV to `catalogs/REFERENCE_CATALOG.csv`; source XLSX
@@ -97,6 +97,25 @@ model serialization contract. OCR, e-line matching, optimization, and a general
 ZMX reader are non-goals for this delivery.
 
 ## Completed C1–C3 baseline record
+
+R2 execution boundary (base `cdea729`): matching policy and dispersion helper,
+CLI profile choices, their matching/CLI tests, and policy sections of active docs.
+Keep source strings, supplied-name precedence, exact lookup before normalization,
+ordinary pool ranking, and exporter behavior intact. PgF-only input contributes
+one derived dPgF comparison channel, not both PgF and its derivative. Its format
+resolution is `PgF_step + abs(normal_line_slope) * vd_step`, not the computed
+decimal expansion's last place; this is not a measurement-uncertainty claim.
+Explicit PgF plus dPgF retain the existing maximum-residual comparison. Derive
+catalogue dPgF when absent using the same helper, never default missing matching
+data to zero. Store effective values/provenance separately for R3 export.
+Gate: all profile exclusions and priority orders, strict molding boundaries,
+front/back/cemented ownership, conversion endpoints/sign/precedence/resolution,
+and catalogue-order stability tested; full suite/Ruff/diff and fresh review pass
+before `feat(matching): add molding preferences and manufacturer profiles`.
+Model fallback and exporter changes remain R3, not R2.
+R2 completed with 141 passing tests, Ruff and diff checks, and fresh adversarial
+approval after fixing caller-context leakage in derived resolution. The revised
+reference-catalogue CLI smoke matched all six sample materials under Canon.
 
 R1 execution boundary (base `70d45ac`): change only catalogue records/loading,
 supplied-name lookup normalization, their input/matching tests, and the catalogue

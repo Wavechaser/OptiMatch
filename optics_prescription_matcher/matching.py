@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any, Iterable
 
 from .models import CatalogGlass, Prescription, Surface
@@ -18,9 +18,32 @@ class MatchProfile:
 
 PROFILES = {
     "default": MatchProfile("default", ("Ohara", "Hoya", "Hikari")),
-    "canon": MatchProfile("canon", ("Ohara", "Hoya"), frozenset({"hikari"})),
-    "nikon": MatchProfile("nikon", ("Hikari", "Ohara", "Hoya")),
+    "canon": MatchProfile(
+        "canon", ("Ohara", "Hoya"), frozenset({"hikari", "cdgm", "schott", "sumita"})
+    ),
+    "nikon": MatchProfile(
+        "nikon", ("Hikari", "Hoya", "Ohara"), frozenset({"cdgm", "schott", "sumita"})
+    ),
+    "sony": MatchProfile(
+        "sony", ("Hoya", "Ohara", "Hikari"), frozenset({"cdgm", "schott", "sumita"})
+    ),
+    "sigma": MatchProfile(
+        "sigma", ("Hoya", "Ohara"), frozenset({"hikari", "cdgm", "schott", "sumita"})
+    ),
+    "fujifilm": MatchProfile(
+        "fujifilm", ("Ohara", "Hoya", "CDGM", "Hikari"), frozenset({"schott", "sumita"})
+    ),
 }
+
+
+def pgf_to_dpgf(pgf: str, vd: str) -> str:
+    """Return dPgF relative to the F2--K7 normal line."""
+    with localcontext() as context:
+        context.prec = 28
+        normal = Decimal(".582848") + (Decimal(vd) - Decimal("36.26")) * (
+            Decimal(".543528") - Decimal(".582848")
+        ) / (Decimal("60.49") - Decimal("36.26"))
+        return str(Decimal(pgf) - normal)
 
 
 @dataclass(frozen=True)
@@ -39,6 +62,7 @@ class Match:
     ambiguity: bool = False
     selected: dict[str, Any] | None = None
     alternatives: tuple[dict[str, Any], ...] = ()
+    source_effective_dispersion: dict[str, dict[str, str]] | None = None
 
 
 @dataclass(frozen=True)
@@ -75,30 +99,73 @@ def _identity(glass: CatalogGlass) -> tuple[str, str, str, str, str, str]:
     )
 
 
+def _step(value: str) -> Decimal:
+    return Decimal(1).scaleb(Decimal(value).as_tuple().exponent)
+
+
+def _effective_dispersion(
+    pgf: str | None, dpgf: str | None, vd: str | None
+) -> dict[str, dict[str, str]]:
+    result = {}
+    if pgf is not None:
+        result["pgf"] = {
+            "value": pgf,
+            "provenance": "supplied",
+            "step": str(_step(pgf)),
+        }
+    if dpgf is not None:
+        result["dpgf"] = {
+            "value": dpgf,
+            "provenance": "supplied",
+            "step": str(_step(dpgf)),
+        }
+        return result
+    if pgf is not None and vd is not None:
+        with localcontext() as context:
+            context.prec = 28
+            slope = (Decimal(".543528") - Decimal(".582848")) / (
+                Decimal("60.49") - Decimal("36.26")
+            )
+            resolution = _step(pgf) + abs(slope) * _step(vd)
+        result["dpgf"] = {
+            "value": pgf_to_dpgf(pgf, vd),
+            "provenance": "derived_from_pgf_vd",
+            "step": str(resolution),
+        }
+    return result
+
+
 def _dispersion(
     surface: Surface, glass: CatalogGlass
 ) -> tuple[int, Decimal, dict[str, Any]]:
     residuals: dict[str, Any] = {}
     missing = 0
     scaled: list[Decimal] = []
-    for label, source, candidate in (
-        ("pgf", surface.pgf, glass.pgf),
-        ("dpgf", surface.dpgf, glass.dpgf),
-    ):
-        if source is None:
-            continue
+    source_values = _effective_dispersion(surface.pgf, surface.dpgf, surface.vd)
+    candidate_values = _effective_dispersion(glass.pgf, glass.dpgf, glass.vd)
+    if surface.pgf is not None and surface.dpgf is None:
+        source_values = {"dpgf": source_values["dpgf"]}
+    for label, source in source_values.items():
+        candidate = candidate_values.get(label)
         if candidate is None:
             missing += 1
-            residuals[label] = {"source": source, "catalogue": None, "residual": None}
+            residuals[label] = {
+                "source": source["value"],
+                "catalogue": None,
+                "residual": None,
+            }
             continue
-        difference = Decimal(source) - Decimal(candidate)
-        step = Decimal(1).scaleb(Decimal(source).as_tuple().exponent)
+        difference = Decimal(source["value"]) - Decimal(candidate["value"])
+        step = Decimal(source["step"])
         scaled.append(abs(difference) / step)
         residuals[label] = {
-            "source": source,
-            "catalogue": candidate,
+            "source": source["value"],
+            "catalogue": candidate["value"],
             "residual": str(difference),
             "normalized_residual": str(abs(difference) / step),
+            "source_provenance": source["provenance"],
+            "catalogue_provenance": candidate["provenance"],
+            "source_step": source["step"],
         }
     return missing, max(scaled, default=Decimal(0)), residuals
 
@@ -123,6 +190,13 @@ def _diagnostic(surface: Surface, glass: CatalogGlass) -> dict[str, Any]:
         "catalogue_nd": glass.nd,
         "catalogue_vd": glass.vd,
         "catalogue_dpgf": glass.dpgf,
+        "catalogue_precision_molding": glass.precision_molding,
+        "source_effective_dispersion": _effective_dispersion(
+            surface.pgf, surface.dpgf, surface.vd
+        ),
+        "catalogue_effective_dispersion": _effective_dispersion(
+            glass.pgf, glass.dpgf, glass.vd
+        ),
         "nd_delta": str(nd_delta),
         "vd_delta": str(vd_delta),
         "dispersion": {
@@ -151,7 +225,10 @@ def _decision(
 
 
 def _match_numeric(
-    surface: Surface, catalogue: tuple[CatalogGlass, ...], profile: MatchProfile
+    surface: Surface,
+    catalogue: tuple[CatalogGlass, ...],
+    profile: MatchProfile,
+    asphere_surface_ids: tuple[str, ...] = (),
 ) -> tuple[Surface, Match]:
     nd = Decimal(surface.nd)  # type: ignore[arg-type]
     vd = Decimal(surface.vd)  # type: ignore[arg-type]
@@ -160,9 +237,21 @@ def _match_numeric(
         for glass in catalogue
         if glass.manufacturer.casefold() not in profile.excluded
     ]
+    molding_pool = (
+        [
+            glass
+            for glass in permitted
+            if glass.precision_molding is True
+            and abs(nd - glass.nd_value) < Decimal("0.005")
+            and abs(vd - glass.vd_value) < Decimal("0.5")
+        ]
+        if asphere_surface_ids
+        else []
+    )
+    candidates = molding_pool or permitted
     close = [
         glass
-        for glass in permitted
+        for glass in candidates
         if abs(nd - glass.nd_value) < Decimal("0.0002")
         and abs(vd - glass.vd_value) < Decimal("0.1")
     ]
@@ -196,12 +285,18 @@ def _match_numeric(
         status = "offset"
         eligible = [
             glass
-            for glass in permitted
+            for glass in candidates
             if abs(nd - glass.nd_value) < Decimal("0.02")
             and abs(vd - glass.vd_value) < Decimal("2")
         ]
         key = offset_key
     if not eligible:
+        molding_reason = (
+            f"asphere surface(s) {', '.join(asphere_surface_ids)} triggered molding preference; "
+            f"{'suitable molding pool used' if molding_pool else 'no suitable molding candidate in promotion window; ordinary matching used'}; "
+            if asphere_surface_ids
+            else ""
+        )
         return surface, Match(
             surface.source_id,
             "unmatched",
@@ -209,7 +304,11 @@ def _match_numeric(
             None,
             surface.nd,
             surface.vd,
-            reason="no eligible catalogue glass after profile exclusions",
+            reason=molding_reason
+            + "no eligible catalogue glass after profile exclusions",
+            source_effective_dispersion=_effective_dispersion(
+                surface.pgf, surface.dpgf, surface.vd
+            ),
         )
     ranked = sorted(eligible, key=key)
     selected = ranked[0]
@@ -231,7 +330,13 @@ def _match_numeric(
         selected.typecode,
         str(dn),
         str(dv),
-        reason=_decision(
+        reason=(
+            f"asphere surface(s) {', '.join(asphere_surface_ids)} triggered molding preference; "
+            f"{'suitable molding pool used' if molding_pool else 'no suitable molding candidate in promotion window; ordinary matching used'}; "
+            if asphere_surface_ids
+            else ""
+        )
+        + _decision(
             key(selected),
             key(ranked[1]) if len(ranked) > 1 else None,
             (
@@ -255,6 +360,9 @@ def _match_numeric(
         ),
         selected=_diagnostic(surface, selected),
         alternatives=tuple(_diagnostic(surface, item) for item in ranked[1:]),
+        source_effective_dispersion=_effective_dispersion(
+            surface.pgf, surface.dpgf, surface.vd
+        ),
     )
 
 
@@ -265,14 +373,13 @@ def match_prescription(
 ) -> MatchingResult:
     """Return a matched immutable copy and deterministic per-surface diagnostics."""
     if profile not in PROFILES:
-        raise ValueError(
-            f"unknown profile {profile!r}; choose default, canon, or nikon"
-        )
+        raise ValueError(f"unknown profile {profile!r}; choose {', '.join(PROFILES)}")
     policy = PROFILES[profile]
     glasses = tuple(catalogue)
     surfaces: list[Surface] = []
     matches: list[Match] = []
-    for surface in prescription.surfaces:
+    asphere_ids = {asphere.surface_id for asphere in prescription.aspheres}
+    for index, surface in enumerate(prescription.surfaces):
         if surface.material is None and (
             surface.nd_offset is not None or surface.vd_offset is not None
         ):
@@ -339,6 +446,10 @@ def match_prescription(
                                 "catalogue_nd": chosen.nd,
                                 "catalogue_vd": chosen.vd,
                                 "catalogue_dpgf": chosen.dpgf,
+                                "catalogue_precision_molding": chosen.precision_molding,
+                                "catalogue_effective_dispersion": _effective_dispersion(
+                                    chosen.pgf, chosen.dpgf, chosen.vd
+                                ),
                                 "source_nd_offset": surface.nd_offset,
                                 "source_vd_offset": surface.vd_offset,
                             }
@@ -355,6 +466,9 @@ def match_prescription(
                         }
                         for g in ranked[1:]
                     ),
+                    source_effective_dispersion=_effective_dispersion(
+                        surface.pgf, surface.dpgf, surface.vd
+                    ),
                 )
             )
             surfaces.append(
@@ -363,7 +477,17 @@ def match_prescription(
                 else surface
             )
         else:
-            updated, match = _match_numeric(surface, glasses, policy)
+            following_id = (
+                prescription.surfaces[index + 1].source_id
+                if index + 1 < len(prescription.surfaces)
+                else None
+            )
+            triggers = tuple(
+                item
+                for item in (surface.source_id, following_id)
+                if item in asphere_ids
+            )
+            updated, match = _match_numeric(surface, glasses, policy, triggers)
             surfaces.append(updated)
             matches.append(match)
     return MatchingResult(

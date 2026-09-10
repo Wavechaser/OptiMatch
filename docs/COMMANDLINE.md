@@ -12,11 +12,11 @@ storage are out of scope. OCR can be added independently later.
 
 ## Current delivery note
 
-At the R1 catalogue-input checkpoint, the executable accepts both the historical
-six-column catalogue and the revised nine-column catalogue described below.
-Only `default`, `canon`, and `nikon` profiles are currently accepted, and an
-unmatched material still blocks ZMX output. R2–R3 will add the remaining profiles,
-molding-aware selection, partial-dispersion derivation, and model-glass fallback.
+At the R2 matching-policy checkpoint, the executable accepts both the historical
+six-column catalogue and the revised nine-column catalogue described below. All
+six profiles, molding-aware selection, and partial-dispersion derivation are
+implemented. An unmatched material still blocks ZMX output; model-glass fallback
+remains the pending R3 checkpoint.
 
 The active delivery policy uses these strict numerical boundaries:
 
@@ -43,7 +43,7 @@ Complete invocation (there are no subcommands):
 
 ```text
 python -m optics_prescription_matcher INPUT --catalog CSV --output PREFIX
-    [--profile {default,canon,nikon}]
+    [--profile {default,canon,nikon,sony,sigma,fujifilm}]
     [--format {csv,zmx,both}]
     [--metadata JSON] [--overwrite]
     [--field-preset {1-type,m43,aps-c,full-frame,44x33}]
@@ -54,7 +54,7 @@ python -m optics_prescription_matcher INPUT --catalog CSV --output PREFIX
 | `INPUT` | Required prescription path. A `.csv` suffix (case-insensitive) selects the sectioned CSV adapter; otherwise the file is read as canonical JSON. Not a PDF, image, ZMX, or workbook reader. |
 | `--catalog CSV` | Required glass catalogue CSV export. |
 | `--output PREFIX` | Required output prefix; `.csv`, `.zmx`, and `.report.json` suffixes are appended, not substituted. Parent directories are created. |
-| `--profile default\|canon\|nikon` | Glass preference profile; default `default`. |
+| `--profile default\|canon\|nikon\|sony\|sigma\|fujifilm` | Glass preference profile; default `default`. |
 | `--format csv\|zmx\|both` | Requested prescription outputs; default `both`. Every successful invocation also writes the JSON report. |
 | `--metadata JSON` | Optional metadata overlay for a CSV prescription only. Cannot replace CSV tables. |
 | `--field-preset 1-type\|m43\|aps-c\|full-frame\|44x33` | ZMX real-image-height y-field preset. Overrides `system.field_preset`, not explicit real-image-height fields. An explicit angle field type conflicts with a preset. Ignored for CSV-only output. No implicit format. |
@@ -76,8 +76,19 @@ Run the study-model workflow with a canonical JSON or sectioned CSV input:
   --output output/study --format both
 ```
 
-Profiles are `default` (Ohara, Hoya, Hikari), `canon` (Ohara, Hoya; Hikari
-excluded for inferred matches), and `nikon` (Hikari, Ohara, Hoya). The
+Profile policies are:
+
+| Profile | Preference order | Exclusions |
+| --- | --- | --- |
+| `default` | Ohara, Hoya, Hikari, others | None |
+| `canon` | Ohara, Hoya, others | Hikari, CDGM, Schott, Sumita |
+| `nikon` | Hikari, Hoya, Ohara, others | CDGM, Schott, Sumita |
+| `sony` | Hoya, Ohara, Hikari, others | CDGM, Schott, Sumita |
+| `sigma` | Hoya, Ohara, others | Hikari, CDGM, Schott, Sumita |
+| `fujifilm` | Ohara, Hoya, CDGM, Hikari, others | Schott, Sumita |
+
+Exclusions apply only to inferred matching. Explicit typecodes remain
+authoritative. The
 `--format` option defaults to `both`; use `csv` for an incomplete transcription that
 lacks the system metadata required by ZMX, or `zmx` for model-only output. A JSON
 report is always written on success. Existing outputs require
@@ -131,11 +142,21 @@ Other sample-specific header settings are not copied.
 The JSON report distinguishes air, supplied typecodes, close matches, offset
 matches, and unmatched properties. It includes signed prescription-minus-
 catalogue differences, source precision steps, partial-dispersion residuals,
-alternatives, ambiguities, and the ranking criterion that selected a candidate.
+effective supplied/derived dispersion values and their provenance, molding
+suitability, asphere trigger IDs, alternatives, ambiguities, and the ranking
+criterion that selected a candidate.
 An unknown supplied typecode is preserved and marked host-lookup-unverified.
 Reported decimal steps describe source formatting, not independently established
 measurement accuracy; Excel padding can make them misleading. Supplied offsets
 require a named base glass and are preserved, never reinterpreted as air.
+
+When dPgF is absent but PgF and Vd are present, matching derives dPgF from the
+documented F2--K7 normal line. A supplied dPgF always wins. A PgF-only source
+contributes only that derived dPgF comparison channel; explicitly supplied PgF
+and dPgF retain both channels and use the maximum normalized residual. Derived
+format resolution is the PgF last-place step plus the absolute normal-line slope
+times the Vd last-place step. Source and catalogue strings are not rewritten,
+and missing catalogue dispersion remains missing rather than becoming zero.
 
 ## Prescription inputs
 

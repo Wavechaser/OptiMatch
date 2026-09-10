@@ -20,7 +20,7 @@ from .inputs import (
     load_prescription_json,
     load_sectioned_csv,
 )
-from .matching import match_prescription
+from .matching import PROFILES, match_prescription
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,9 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("input", type=Path)
     parser.add_argument("--catalog", required=True, type=Path)
-    parser.add_argument(
-        "--profile", choices=("default", "canon", "nikon"), default="default"
-    )
+    parser.add_argument("--profile", choices=tuple(PROFILES), default="default")
     parser.add_argument("--output", required=True, type=Path, help="output prefix")
     parser.add_argument(
         "--metadata", type=Path, help="JSON metadata overlay for CSV input"

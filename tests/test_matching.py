@@ -9,16 +9,25 @@ from optics_prescription_matcher.inputs import (
     load_sectioned_csv,
     prescription_from_dict,
 )
-from optics_prescription_matcher.matching import match_prescription
-from optics_prescription_matcher.models import CatalogGlass, Prescription, Surface
+from optics_prescription_matcher.matching import (
+    PROFILES,
+    match_prescription,
+    pgf_to_dpgf,
+)
+from optics_prescription_matcher.models import (
+    Asphere,
+    CatalogGlass,
+    Prescription,
+    Surface,
+)
 
 
 def prescription(surface):
     return Prescription(1, "test", "mm", (surface,))
 
 
-def glass(name, nd, vd, maker="Ohara", pgf=None, dpgf=None):
-    return CatalogGlass(maker, name, nd, vd, pgf, dpgf)
+def glass(name, nd, vd, maker="Ohara", pgf=None, dpgf=None, molding=None):
+    return CatalogGlass(maker, name, nd, vd, pgf, dpgf, precision_molding=molding)
 
 
 @pytest.mark.parametrize(
@@ -110,7 +119,7 @@ def test_partial_dispersion_missing_metadata_is_not_a_perfect_match():
     assert result.matches[0].selected["catalogue_dpgf"] is None
     missing = result.matches[0].alternatives[0]["dispersion"]
     assert missing["missing_supplied_fields"] == 1
-    assert missing["residuals"]["pgf"]["catalogue"] is None
+    assert missing["residuals"]["dpgf"]["catalogue"] is None
 
 
 def test_offset_ranking_uses_dispersion_before_numeric_proximity():
@@ -271,3 +280,195 @@ def test_real_sample_catalogue_is_a_diagnostic_not_a_ranking_golden():
         "offset",
         "unmatched",
     }
+
+
+@pytest.mark.parametrize(
+    ("profile", "order", "excluded"),
+    [
+        ("default", ("Ohara", "Hoya", "Hikari", "Other"), ()),
+        ("canon", ("Ohara", "Hoya", "Other"), ("Hikari", "CDGM", "Schott", "Sumita")),
+        ("nikon", ("Hikari", "Hoya", "Ohara", "Other"), ("CDGM", "Schott", "Sumita")),
+        ("sony", ("Hoya", "Ohara", "Hikari", "Other"), ("CDGM", "Schott", "Sumita")),
+        ("sigma", ("Hoya", "Ohara", "Other"), ("Hikari", "CDGM", "Schott", "Sumita")),
+        (
+            "fujifilm",
+            ("Ohara", "Hoya", "CDGM", "Hikari", "Other"),
+            ("Schott", "Sumita"),
+        ),
+    ],
+)
+def test_all_profile_orders_and_exclusions(profile, order, excluded):
+    source = prescription(Surface("1", "10", "2", nd="1.5", vd="50"))
+    for index, expected in enumerate(order):
+        catalogue = [
+            glass(maker, "1.5", "50", maker) for maker in reversed(order[index:])
+        ]
+        assert (
+            match_prescription(source, catalogue, profile)
+            .matches[0]
+            .selected_manufacturer
+            == expected
+        )
+    for maker in excluded:
+        result = match_prescription(source, [glass(maker, "1.5", "50", maker)], profile)
+        assert result.matches[0].status == "unmatched"
+        aspheric = replace(source, aspheres=(_asphere("1"),))
+        molding = match_prescription(
+            aspheric, [glass(maker, "1.5", "50", maker, molding=True)], profile
+        )
+        assert molding.matches[0].status == "unmatched"
+    assert tuple(PROFILES) == ("default", "canon", "nikon", "sony", "sigma", "fujifilm")
+
+
+def test_pgf_to_dpgf_endpoints_midpoint_and_caller_context():
+    from decimal import localcontext
+
+    assert Decimal(pgf_to_dpgf(".582848", "36.26")) == 0
+    assert Decimal(pgf_to_dpgf(".543528", "60.49")) == 0
+    midpoint_vd = str((Decimal("36.26") + Decimal("60.49")) / 2)
+    assert Decimal(pgf_to_dpgf(".57", midpoint_vd)) > 0
+    with localcontext() as context:
+        context.prec = 5
+        assert pgf_to_dpgf(".582848", "36.26") == "0.000000"
+
+
+def test_effective_dispersion_resolution_ignores_caller_decimal_context():
+    from decimal import localcontext
+
+    source = Surface("1", "10", "2", nd="1.5", vd="50.0", pgf=".55")
+    with localcontext() as context:
+        context.prec = 5
+        match = match_prescription(
+            prescription(source), [glass("G", "1.5", "50", pgf=".55")]
+        ).matches[0]
+    assert (
+        match.source_effective_dispersion["dpgf"]["step"]
+        == "0.01016227816756087494841106067"
+    )
+
+
+def test_effective_dispersion_derivation_precedence_resolution_and_immutability():
+    surface = Surface("1", "10", "2", nd="1.5", vd="50.0", pgf=".55")
+    result = match_prescription(
+        prescription(surface),
+        [glass("G", "1.5", "50", pgf=".55", dpgf=".123")],
+    )
+    selected = result.matches[0].selected
+    effective = selected["source_effective_dispersion"]
+    assert set(effective) == {"pgf", "dpgf"}
+    assert effective["dpgf"]["provenance"] == "derived_from_pgf_vd"
+    expected_step = Decimal(".01") + abs(
+        (Decimal(".543528") - Decimal(".582848")) / Decimal("24.23")
+    ) * Decimal(".1")
+    assert Decimal(effective["dpgf"]["step"]) == expected_step
+    assert selected["catalogue_effective_dispersion"]["dpgf"] == {
+        "value": ".123",
+        "provenance": "supplied",
+        "step": "0.001",
+    }
+    assert result.prescription.surfaces[0].pgf == ".55"
+    assert result.prescription.surfaces[0].dpgf is None
+    assert set(selected["dispersion"]["residuals"]) == {"dpgf"}
+
+
+def test_explicit_dual_source_compares_pgf_to_pgf_only_catalogue():
+    source = Surface("1", "10", "2", nd="1.5", vd="50", pgf=".55", dpgf=".01")
+    result = match_prescription(
+        prescription(source), [glass("G", "1.5", "50", pgf=".551")]
+    )
+    residuals = result.matches[0].selected["dispersion"]["residuals"]
+    assert residuals["pgf"]["catalogue"] == ".551"
+    assert residuals["dpgf"]["catalogue_provenance"] == "derived_from_pgf_vd"
+
+
+def test_unmatched_pgf_source_retains_effective_dispersion_in_report():
+    source = Surface("1", "10", "2", nd="1.9", vd="20.0", pgf=".70")
+    match = match_prescription(prescription(source), []).matches[0]
+    assert match.status == "unmatched"
+    assert (
+        match.source_effective_dispersion["dpgf"]["provenance"] == "derived_from_pgf_vd"
+    )
+
+
+def test_derived_catalogue_dispersion_beats_missing_candidate():
+    surface = Surface("1", "10", "2", nd="1.5", vd="50", pgf=".55")
+    result = match_prescription(
+        prescription(surface),
+        [glass("MISSING", "1.5", "50"), glass("DERIVED", "1.5", "50", pgf=".55")],
+    )
+    assert result.matches[0].selected_typecode == "DERIVED"
+    assert (
+        result.matches[0].alternatives[0]["dispersion"]["missing_supplied_fields"] == 1
+    )
+
+
+def _asphere(surface_id):
+    return Asphere(surface_id, "even", "0", {})
+
+
+@pytest.mark.parametrize("trigger_id", ["1", "2"])
+def test_front_or_back_asphere_promotes_molding_candidate(trigger_id):
+    source = Prescription(
+        1,
+        "test",
+        "mm",
+        (Surface("1", "10", "2", nd="1.5", vd="50"), Surface("2", "20", "0")),
+        (_asphere(trigger_id),),
+    )
+    result = match_prescription(
+        source,
+        [glass("ORDINARY", "1.5", "50"), glass("MOLD", "1.504", "50.4", molding=True)],
+    )
+    assert result.matches[0].status == "offset"
+    assert result.matches[0].selected_typecode == "MOLD"
+    assert result.matches[0].selected["catalogue_precision_molding"] is True
+    assert trigger_id in result.matches[0].reason
+
+
+@pytest.mark.parametrize(("nd", "vd"), [("1.505", "50.4"), ("1.504", "50.5")])
+def test_molding_pool_is_strict_bounded_and_does_not_propagate_cemented_group(nd, vd):
+    surfaces = (
+        Surface("1", "10", "2", nd="1.5", vd="50"),
+        Surface("2", "20", "2", nd="1.5", vd="50"),
+        Surface("3", "30", "0"),
+    )
+    source = Prescription(1, "test", "mm", surfaces, (_asphere("1"),))
+    catalogue = [
+        glass("ORDINARY", "1.5", "50"),
+        glass("BOUNDARY", nd, vd, molding=True),
+    ]
+    result = match_prescription(source, catalogue)
+    assert [match.selected_typecode for match in result.matches[:2]] == [
+        "ORDINARY",
+        "ORDINARY",
+    ]
+    inside = [
+        glass("ORDINARY", "1.5", "50"),
+        glass("INSIDE", "1.504999", "50.499", molding=True),
+    ]
+    promoted = match_prescription(source, inside)
+    assert promoted.matches[0].selected_typecode == "INSIDE"
+    assert promoted.matches[1].selected_typecode == "ORDINARY"
+
+
+def test_no_asphere_or_empty_molding_pool_keeps_ordinary_stable_ranking():
+    source = prescription(Surface("1", "10", "2", nd="1.5", vd="50"))
+    catalogue = [glass("B", "1.5", "50", molding=True), glass("A", "1.5", "50")]
+    assert match_prescription(source, catalogue).matches[0].selected_typecode == "A"
+    aspheric = replace(source, aspheres=(_asphere("1"),))
+    assert (
+        match_prescription(aspheric, reversed(catalogue)).matches[0].selected_typecode
+        == "B"
+    )
+
+
+def test_supplied_name_is_authoritative_despite_asphere_profile_and_molding():
+    supplied = Surface("1", "10", "2", material="KEEP", nd="1.5", vd="50")
+    source = Prescription(1, "test", "mm", (supplied,), (_asphere("1"),))
+    catalogue = [
+        glass("KEEP", "1.5", "50", "Schott", molding=False),
+        glass("MOLD", "1.5", "50", "Ohara", molding=True),
+    ]
+    result = match_prescription(source, catalogue, "canon")
+    assert result.prescription.surfaces[0] == supplied
+    assert result.matches[0].selected_typecode == "KEEP"

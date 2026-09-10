@@ -1,8 +1,9 @@
 # Desired features
 
 Status: validated JSON/CSV inputs, deterministic glass matching, CSV/ZMX output,
-and the JSON report CLI are implemented. Catalogue modernization, molding-aware
-selection, and model-glass fallback are the current delivery; OCR remains planned.
+the revised catalogue, all manufacturer profiles, molding-aware selection, and
+partial-dispersion derivation are implemented. Model-glass fallback is the pending
+R3 delivery; OCR remains planned.
 Engineering decisions and delivery checkpoints belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).
@@ -59,6 +60,8 @@ the materials or tolerances of production lenses.
   is a preference, not a material-class exclusion.
 - When PgF is supplied without dPgF, derive dPgF from the documented F2–K7
   normal line so partial dispersion remains useful for selection and export.
+  Preserve the source strings and report supplied versus derived provenance;
+  never substitute zero for missing matching data.
 - Calculate offsets as prescription minus catalogue. Display precision should
   reflect the supplied data rather than imply extra measurement accuracy.
 - If no suitable catalogue candidate exists, retain the original nd/Vd as an
