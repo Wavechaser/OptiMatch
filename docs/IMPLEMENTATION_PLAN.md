@@ -17,6 +17,73 @@ Accept future OCR results through the same structured input contract.
 
 ## Current delivery register
 
+### Forced controls and asphere refinement (2026-09-14)
+
+The accepted extension is implemented without a reverse search pass or new
+runtime dependencies. `ExportSetup` owns repeatable forced compensator pairs,
+inclusive position spans, a normal/reversed position preference, and disjoint
+OIS boundary pairs. Existing render callers retain their defaults. CLI rejects
+these controls for CSV-only output before publishing any files.
+
+Resolved constraints carry provenance and optional per-configuration Decimal
+totals. Explicit and forced dependencies are topologically evaluated; duplicate
+owners and cycles fail. CLI forcing replaces an explicit constraint on the same
+dependent or identical thickness footprint and logs the original constraint.
+Remaining explicit/forced varying terms exclude conflicting inferred equations.
+Constant forced totals need no TSP2; varying totals receive it.
+
+Position equations normalize to inclusive thickness spans for rear-dummy
+transformation. Encoding then uses last/first endpoints for normal placement,
+or first/successor-of-last for reversed placement. Explicit input placement is
+preserved, CLI-forced placement follows the requested direction, and unsafe
+inferred reversals fall back with a diagnostic. This changes application only;
+the search remains forward-only. Dummy splitting adjusts each forced total and
+preserves original vertices, with the fixed remainder outside reversed spans.
+
+OIS pairs are zero-initialized CADY/CBDY operands. After earlier sections are
+assembled, calculate the exact one-based CADY operand row including MOFFs.
+Every CBDY cell picks up that row in the same configuration with multiplier -1.
+Do not use source/export surface numbers as pickup operand indices. Overlapping
+intervals including shared boundaries are rejected in this delivery.
+
+Asphere classification uses exactly nonzero powers, ordinary odd power 1–8 and
+ordinary even powers 2–16. All-zero odd powers select even output; zero padding
+does not extend capacity. For normalized ordinary terms, divide by r0^power.
+Input numeric strings/tables are preserved; an explicitly even family still
+rejects nonzero odd coefficients.
+
+The new tests cover public CLI validation, forced precedence, signed totals,
+normal/reversed endpoints, dependency conflicts, OIS row indexing, variable
+rear-dummy geometry, source preservation, mixed-family classification, and sag
+equivalence. Isolated OpticStudio 2023 R1.00 load/save/reload controls passed
+compensator, normal/reversed position, all three variable rear-dummy combinations,
+positive/zero/negative sums, and ordinary-odd records. Perturbations confirmed
+TSP2 dependent movement, exact CBDY pickup rows, same-configuration cancellation,
+and OIS isolation in global coordinates. Host lifecycle follows COMMANDLINE.md;
+no user session or reference file was modified.
+
+`samples/` and `catalogs/` become ignored/local-only. Previously tracked files
+are removed from the index, not the disk or historical commits. Required tests
+and quickstart use small synthetic committed fixtures instead of private data;
+full-catalogue loading remains an optional manual audit. The documentation roles
+and package/distribution names remain unchanged.
+
+Final verification: 240 tests pass in the working tree and in a separate copy
+without samples/catalogs, with a fresh locally built installation. The synthetic
+README quickstart exports CSV/ZMX/report successfully there; an outside-checkout
+import resolves to that copy's installed package. Ruff lint/format, pip check,
+and Git whitespace checks pass. Twelve isolated host cases pass load/save/reload
+and perturbations, including single-thickness spans, normalized ordinary odd,
+zero-padded mixed/even output, and BFL adjustment decoupling. Seven untracked
+reference files retain their pre-change SHA-256 hashes. No commit or push was
+requested for this delivery.
+
+An adversarial review found that switching an inferred dependent could otherwise
+relocate a source-rounding correction. Reorientation now serializes the already
+evaluated accepted geometry, keeping that correction on its original thickness;
+normal no-reorientation output retains its prior behavior. A focused regression
+checks this alongside exact-span and dependency-order tests.
+
 ### Export refinements F1–F4 (2026-09-11)
 
 Execution baseline: `d328957`, clean worktree; 162 tests pass. Work directly in

@@ -12,6 +12,13 @@ class ResolvedSolve:
     surface_id: str
     reference_surface_id: str
     total: str
+    totals: tuple[str, ...] = ()
+    origin: str = "inferred"
+    # Retained while position endpoints are canonicalized for dummy insertion.
+    reverse: bool = False
+
+    def total_at(self, index: int) -> str:
+        return self.totals[index] if self.totals else self.total
 
 
 @dataclass(frozen=True)
@@ -99,17 +106,54 @@ def _comparable(value: str) -> Decimal | str:
     return Decimal(value)
 
 
-def _terms(solve: Solve, order: dict[str, int], surface_ids: list[str]) -> list[str]:
+def _terms(
+    solve: Solve | ResolvedSolve, order: dict[str, int], surface_ids: list[str]
+) -> list[str]:
     start = order[solve.reference_surface_id]
     end = order[solve.surface_id]
-    if start >= end or end == len(surface_ids) - 1:
+    if end == len(surface_ids) - 1 or end == 0:
         raise ValueError(
-            f"solve on surface {solve.surface_id}: reference must precede "
-            "an internal dependent surface"
+            f"solve on surface {solve.surface_id}: dependent must be internal "
+            "(not OBJ or IMG)"
         )
     if solve.kind == "complementary_gap":
+        if start >= end or start == 0:
+            raise ValueError(
+                "compensator reference must precede an internal dependent surface"
+            )
         return [solve.reference_surface_id, solve.surface_id]
+    if start > end:
+        return surface_ids[end:start]
+    if start == 0:
+        raise ValueError("position span must contain only internal thickness surfaces")
     return surface_ids[start : end + 1]
+
+
+def dependency_order(
+    solves: tuple[ResolvedSolve, ...] | list[ResolvedSolve], surface_ids: list[str]
+) -> list[ResolvedSolve]:
+    """Order thickness equations by dependencies; reject duplicate owners/cycles."""
+    order = {item: index for index, item in enumerate(surface_ids)}
+    pending = list(solves)
+    owners = {item.surface_id for item in pending}
+    if len(owners) != len(pending):
+        raise ValueError("multiple solves target the same dependent surface")
+    result = []
+    while pending:
+        ready = [
+            item
+            for item in pending
+            if not (
+                (set(_terms(item, order, surface_ids)) - {item.surface_id}) & owners
+            )
+        ]
+        if not ready:
+            raise ValueError("thickness solve dependency cycle; change solve placement")
+        for item in ready:
+            result.append(item)
+            pending.remove(item)
+            owners.remove(item.surface_id)
+    return result
 
 
 def _step(
@@ -423,7 +467,12 @@ def _infer_solves(
     return accepted, diagnostics
 
 
-def resolve_solves(prescription: Prescription) -> SolveResult:
+def resolve_solves(
+    prescription: Prescription,
+    *,
+    forced: tuple[ResolvedSolve, ...] = (),
+    infer: bool = True,
+) -> SolveResult:
     """Resolve configuration values and validate explicit TCOM/TOLE relationships."""
     ids = [surface.source_id for surface in prescription.surfaces]
     order = {surface_id: index for index, surface_id in enumerate(ids)}
@@ -431,33 +480,29 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
     source_values = tuple(dict(item) for item in values)
     accepted: list[ResolvedSolve] = []
     diagnostics: list[dict[str, object]] = []
-    counts: dict[str, int] = {}
-    for solve in prescription.solves:
-        counts[solve.surface_id] = counts.get(solve.surface_id, 0) + 1
-    derived: set[tuple[int, str]] = set()
-    ordered_solves = sorted(
-        prescription.solves, key=lambda item: order[item.surface_id]
-    )
-    for solve in ordered_solves:
-        if counts[solve.surface_id] > 1:
-            diagnostics.append(
-                _candidate_identity(
-                    ResolvedSolve(
-                        solve.kind,
-                        solve.surface_id,
-                        solve.reference_surface_id,
-                        solve.total,
-                    )
-                )
-                | {
-                    "status": "ambiguous",
-                    "reason": "multiple explicit solves",
-                }
+    explicit = (
+        tuple(
+            ResolvedSolve(
+                item.kind,
+                item.surface_id,
+                item.reference_surface_id,
+                item.total,
+                origin="explicit",
+                reverse=(
+                    item.kind == "constant_span"
+                    and order[item.surface_id] < order[item.reference_surface_id]
+                ),
             )
-            continue
+            for item in prescription.solves
+        )
+        + forced
+    )
+    derived: set[tuple[int, str]] = set()
+    ordered_solves = dependency_order(explicit, ids)
+    for solve in ordered_solves:
         terms = _terms(solve, order, ids)
-        expected = Decimal(solve.total)
         for config_index, config in enumerate(values):
+            expected = Decimal(solve.total_at(config_index))
             if solve.surface_id in config:
                 continue
             independent = [item for item in terms if item != solve.surface_id]
@@ -479,7 +524,9 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
             )
             for config in values
         ]
-        adjustments = [expected - total for total in totals]
+        adjustments = [
+            Decimal(solve.total_at(index)) - total for index, total in enumerate(totals)
+        ]
         consistent = True
         for config_index, adjustment in enumerate(adjustments):
             if adjustment == 0:
@@ -501,14 +548,7 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
                 }
             )
             continue
-        accepted.append(
-            ResolvedSolve(
-                solve.kind,
-                solve.surface_id,
-                solve.reference_surface_id,
-                solve.total,
-            )
-        )
+        accepted.append(solve)
         solved_values = [
             Decimal(config[solve.surface_id]) + adjustment
             for config, adjustment in zip(values, adjustments, strict=True)
@@ -516,7 +556,7 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
         diagnostics.append(
             {
                 "surface_id": solve.surface_id,
-                "status": "explicit",
+                "status": solve.origin,
                 "adjustments": [
                     {
                         "configuration": (
@@ -547,6 +587,7 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
         for config, solved in zip(values, solved_values, strict=True):
             config[solve.surface_id] = str(solved)
     explicit_equations: list[tuple[tuple[str, ...], Decimal]] = []
+    explicit_terms: set[str] = set()
     for solve in accepted:
         terms = _terms(
             Solve(
@@ -560,16 +601,19 @@ def resolve_solves(prescription: Prescription) -> SolveResult:
             for item in terms
             if len({Decimal(config[item]) for config in values}) > 1
         )
+        explicit_terms.update(varying)
         invariant_total = sum(
             (Decimal(values[0][item]) for item in terms if item not in varying),
             Decimal(),
         )
-        explicit_equations.append((varying, Decimal(solve.total) - invariant_total))
-    explicit_terms = {item for equation, _ in explicit_equations for item in equation}
+        if not solve.totals or len({Decimal(item) for item in solve.totals}) == 1:
+            explicit_equations.append((varying, Decimal(solve.total) - invariant_total))
+    if not infer:
+        return SolveResult(values, tuple(accepted), tuple(diagnostics))
     inferred, inferred_diagnostics = _infer_solves(
         prescription,
         values,
-        {item.surface_id for item in prescription.solves},
+        {item.surface_id for item in explicit},
         explicit_equations,
         explicit_terms,
     )

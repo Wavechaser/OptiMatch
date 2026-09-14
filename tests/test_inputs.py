@@ -104,18 +104,18 @@ def test_json_rejects_duplicate_keys(tmp_path):
 
 
 def test_catalogue_loads_sample_and_preserves_precision():
-    records = load_catalog_csv(ROOT / "samples" / "combined_glass_catalog.csv")
-    assert records[0].typecode == "E-FDS3"
-    assert records[0].nd == "2.1042"
-    assert records[-1].dpgf == "0.055200"
+    records = load_catalog_csv(ROOT / "tests" / "fixtures" / "catalog.csv")
+    assert records[0].typecode == "S-BSL7"
+    assert records[0].nd == "1.51680"
+    assert records[-1].dpgf == "0.012300"
 
 
 def test_revised_catalogue_loads_all_rows_and_retains_optional_fields():
-    records = load_catalog_csv(ROOT / "catalogs" / "REFERENCE_CATALOG.csv")
-    assert len(records) == 1186
-    assert records[0].typecode == "S-FPL51"
-    assert records[0].ne == "1.49845"
-    assert records[0].ve == "81.1526"
+    records = load_catalog_csv(ROOT / "tests" / "fixtures" / "catalog.csv")
+    assert len(records) == 2
+    assert records[0].typecode == "S-BSL7"
+    assert records[0].ne == "1.51872"
+    assert records[0].ve == "63.9600"
     assert records[0].precision_molding is None
 
 
@@ -243,11 +243,11 @@ def test_catalogue_rejects_duplicate_identity(tmp_path):
 
 
 def test_sample_adapter_assigns_sections_and_offsets():
-    result = load_sectioned_csv(ROOT / "samples" / "sample_lens_data.csv")
-    assert len(result.surfaces) == 13
+    result = load_sectioned_csv(ROOT / "tests" / "fixtures" / "study.csv")
+    assert len(result.surfaces) == 5
     assert result.surfaces[0].source_id == "OBJ"
-    assert result.surfaces[10].nd_offset == "0.005000"
-    assert result.aspheres[0].coefficients[4] == "-3.4255E-05"
+    assert result.surfaces[1].nd_offset == "+0.000100"
+    assert result.aspheres[0].coefficients[4] == "-1.2500E-05"
     assert result.configurations[0].thicknesses["d0"] == "infinity"
 
 

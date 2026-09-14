@@ -263,13 +263,13 @@ def test_air_and_model_are_distinct_and_source_is_preserved():
     assert result.prescription == source
 
 
-def test_real_sample_catalogue_is_a_diagnostic_not_a_ranking_golden():
+def test_fixture_catalogue_produces_complete_diagnostics():
     from pathlib import Path
 
     root = Path(__file__).parents[1]
     result = match_prescription(
-        load_sectioned_csv(root / "samples" / "sample_lens_data.csv"),
-        load_catalog_csv(root / "samples" / "combined_glass_catalog.csv"),
+        load_sectioned_csv(root / "tests" / "fixtures" / "study.csv"),
+        load_catalog_csv(root / "tests" / "fixtures" / "catalog.csv"),
     )
     assert len(result.matches) == len(result.prescription.surfaces)
     assert all(match.reason for match in result.matches)

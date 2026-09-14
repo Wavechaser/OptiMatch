@@ -9,7 +9,7 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_sample_round_trip_preserves_meaningful_source_values(tmp_path):
-    source = load_sectioned_csv(ROOT / "samples" / "sample_lens_data.csv")
+    source = load_sectioned_csv(ROOT / "tests" / "fixtures" / "study.csv")
     output = tmp_path / "roundtrip.csv"
     write_prescription_csv(source, output)
     reread = load_sectioned_csv(output)
@@ -18,7 +18,7 @@ def test_sample_round_trip_preserves_meaningful_source_values(tmp_path):
     assert reread.configurations == source.configurations
     text = output.read_text(encoding="utf-8")
     assert "nd offset,vd offset" in text
-    assert "-3.4255E-05" in text
+    assert "-1.2500E-05" in text
 
 
 def test_scrambled_legacy_lens_headers_are_recognized(tmp_path):

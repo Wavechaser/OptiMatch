@@ -94,8 +94,9 @@ the materials or tolerances of production lenses.
   nd/Vd and supplied, PgF-derived, or default-zero dPgF. Keep its CSV material
   cell blank and report it separately from named matches; invalid optical data
   remains an error.
-- Support ordinary even, extended even, and extended odd aspheres, including
-  prescriptions exceeding the ordinary even coefficient capacity.
+- Support ordinary and extended even/odd aspheres. Select extended forms only
+  for nonzero overflow terms; ignore zero padding and export rows with only even
+  nonzero powers as even, retaining original input tables.
 - Retain supplied configurations and calculate configuration distances when the
   patent provides enough information to determine them.
 - Keep ZMX multi-configuration tables compact: title, varying independent
@@ -110,6 +111,12 @@ the materials or tolerances of production lenses.
   data when a relationship is uncertain.
 - Retain multiple independent thickness relationships without treating longer
   spans that merely combine them as competing explanations.
+- Allow explicit export controls for compensators and position spans, including
+  configuration-varying totals. Offer normal or reversed position placement
+  without searching again in reverse, retaining the same covered thicknesses.
+- Allow zero-initialized, paired OIS translation controls with same-configuration
+  cancelling pickups to their actual control rows. Report overrides, conflicts,
+  direction fallbacks, and source/export mappings rather than guessing placement.
 - Initialize y-field vignetting quantities and offsets to zero. Leave per-surface
   clear and mechanical apertures unset rather than copy them from reference
   lenses.

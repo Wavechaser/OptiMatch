@@ -17,6 +17,8 @@ dist/
 .env.*
 !.env.example
 output/
+/samples/
+/catalogs/
 ~$*
 Thumbs.db
 .DS_Store

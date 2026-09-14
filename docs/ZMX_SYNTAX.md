@@ -9,6 +9,10 @@ fields must remain unknown until a controlled edit/save comparison resolves them
 
 ## Evidence
 
+Sample links below refer to local-only ignored inputs and may not exist in a
+fresh checkout. Generated synthetic host controls establish the implemented
+contracts independently of distributing those reference files.
+
 - [Canon EF-M sample](../samples/EF-M%2022mm%20F2%20STM.ZMX): standard surfaces,
   even aspheres, a glass offset, three focus configurations, and the user's
   all-zero ordinary catalogue-glass test on surface 12.
@@ -138,6 +142,7 @@ must not shift higher-order terms into earlier slots.
 | Surface type | Serialized coefficients | Sample evidence |
 | --- | --- | --- |
 | `EVENASPH` | `PARM i A_(2i)`, `i=1..8`: A2 through A16 | EF-M surfaces 14 and 15; `PARM 1 0` precedes nonzero A4. |
+| `ODDASPHE` | `PARM p A_p`, p=1..8, both odd and even powers | API-created ordinary OddAsphere, saved 2026-09-14; generated load/save/reload checks confirm slots 1 and 8. |
 | `XASPHERE` | `XDAT 1 N`, `XDAT 2 r0`, then `XDAT (i+2) alpha_(2i)` | Sigma surface 1 has N=10, r0=1, then A2 through A20. |
 | `XOSPHERE` | `XDAT 1 N`, `XDAT 2 r0`, then `XDAT (p+2) alpha_p` | Sigma surfaces 5 and 6 have N=20, r0=1, then A1 through A20. |
 
@@ -159,6 +164,12 @@ Extended polynomials use `rho = r/r0`. For an input term `A_p * r^p`, emit
 `alpha_p = A_p * r0^p`; choosing r0=1 preserves numerical coefficient values
 when lens units agree. Unit conversion must happen before this mapping.
 The base conic remains controlled by curvature and `CONI`.
+
+Exporter classification considers exactly nonzero coefficients (no magnitude
+cutoff). All-zero odd powers select the even family, and zero high-order padding
+does not trigger extension. Ordinary limits are power 8 for odd, 16 for even.
+For normalized input eligible for ordinary export, write `A_p = alpha_p / r0^p`.
+Source strings, family declarations, and zero padding remain in the CSV data.
 [Extended Asphere](https://ansyshelp.ansys.com/public/Views/Secured/Zemax/v261/en/OpticStudio_User_Guide/OpticStudio_Help/topics/Extended_Asphere.html),
 [Extended Odd Asphere](https://ansyshelp.ansys.com/public/Views/Secured/Zemax/v251/en/OpticStudio_User_Guide/OpticStudio_Help/topics/Extended_Odd_Asphere.html).
 
@@ -171,6 +182,19 @@ i preceding j in the same axial coordinate system:
 | --- | --- | --- |
 | `TCOM i total` | `t_i + t_j = total` | Sigma surface 14 contains `TCOM 11 10.58`; user explanation. |
 | `TOLE i total` | `t_i + t_(i+1) + ... + t_j = total` | Independently saved through OpticStudio Position solve, 2026-09-10. |
+
+For a reversed position solve on j with reference i after j, the constraint is
+`t_j + ... + t_(i-1) = total`: **exclude reference thickness**. Thus a span
+d11..d32 becomes normal `TOLE 11 total` on surface 32, or reversed `TOLE 33 total`
+on surface 11. The latter reference may be IMG. A same-surface position solve
+sets that surface's thickness to the length. Compensator references must still
+precede their dependent. No second reverse inference search is needed.
+
+The RF 70–200 sample corroborates this: reverse `TOLE 33 107.62` on surface 11
+matches d11..d32, while including d33 would give 120.09. Independent generated
+forward/reverse host controls verified positive, zero, and negative signed sums
+in the same unrotated axial coordinate system. Do not generalize those controls
+to arbitrary tilted coordinate systems.
 
 The [official thickness-solve help](https://ansyshelp.ansys.com/public/Views/Secured/Zemax/v251/en/OpticStudio_User_Guide/OpticStudio_Help/topics/Thickness_Solves.html)
 supports the compensator/position distinction, but is not a keyword syntax
@@ -187,7 +211,46 @@ Inference eligibility and handling of rounded sums belong in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Never put an independently
 driven `THIC` value and a thickness solve on the same dependent surface.
 
+## Variable solve and OIS MCE records (2026-09-14)
+
+On OpticStudio 2023 R1.00, generated controls loaded, saved, and reloaded these
+records with correct API values and independent numerical perturbations:
+
+```text
+TSP2 surface configuration total 0 0 0 1 1 1 0 0 "" 0
+CADY after_surface configuration 0 0 0 0 1 1 1 0 0 "" 0
+CBDY before_surface c 0 (c+1) 0 0 c cad_row -1 0 0 "" 0
+```
+
+The final line is a symbolic template: replace `c`, `(c+1)`, and `cad_row` with
+integers. `cad_row` is the **one-based MCE operand row containing CADY**, counting
+LTTL, each THIC/APER/TSP2 operand, and MOFF separators, not configuration records
+or surface IDs. Configuration `c` picks up that row's configuration `c`. The API
+reports ConfigPickup, Operand=cad_row, Configuration=c, ScaleFactor=-1, Offset=0.
+The `(c+1)` field is the observed serialization for these same-column pickups;
+it is not a general decode of other solve types. Opaque flags remain undecoded.
+
+TSP2 controls parameter 2 of the thickness solve: Compensator.Sum or
+Position.Length. Only varying totals require this operand. A +0.25 change in
+one generated TSP2 cell changed the appropriate dependent thickness by +0.25.
+CADY translates after its surface; CBDY translates before its surface. Perturbing
+CADY to +0.25 produced -0.25 in CBDY and +0.25 global y only at strictly
+intervening vertices; all other vertices and configurations stayed at zero.
+Two disjoint pairs with preceding thickness and TSP2 rows passed this test.
+
+Local evidence: `output/controls_host_evidence.json` from
+`output/validate_new_controls.ps1`, using synthetic inputs generated by
+`output/generate_controls_oracles.py`. These task-owned artifacts are ignored;
+the reproducible pure-Python regressions are in `tests/test_export_controls.py`.
+The final twelve host cases additionally verified same-surface position spans,
+normalized ordinary-odd coefficients, zero-padded even output from an odd-family
+row, and fixed-remainder perturbations that leave the solved rear gap unchanged.
+
 ## Export-only rear dummy
+
+Direction encoding now follows dummy insertion. For a reversed transformed
+position span, reference the new dummy so its fixed remainder is excluded.
+Varying forced totals are reduced separately in every configuration.
 
 When an accepted rear `TCOM`/`TOLE` controls the air gap after the last powered
 refractive group, the exporter may insert a plane, no-material dummy after that

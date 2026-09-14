@@ -14,6 +14,7 @@ from .export import (
     render_prescription_csv,
     render_zmx,
 )
+from .export_setup import ExportSetup
 from .inputs import (
     InputError,
     load_catalog_csv,
@@ -41,6 +42,35 @@ def _parser() -> argparse.ArgumentParser:
         "--field-preset",
         choices=tuple(FIELD_PRESETS),
         help="ZMX field preset (explicit fields take precedence)",
+    )
+    parser.add_argument(
+        "--force-compensator",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("REFERENCE", "SOLVE"),
+        help="force a compensator using source surface IDs",
+    )
+    parser.add_argument(
+        "--force-position",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("FIRST", "LAST"),
+        help="force an inclusive thickness span using source surface IDs",
+    )
+    parser.add_argument(
+        "--position-direction",
+        choices=("normal", "reversed"),
+        help="preferred position-solve placement (default: normal)",
+    )
+    parser.add_argument(
+        "--ois",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("AFTER", "BEFORE"),
+        help="create zero-valued paired OIS translations",
     )
     return parser
 
@@ -115,6 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --metadata is only valid with a CSV input", file=sys.stderr)
         return 2
     try:
+        if args.format == "csv" and (
+            args.force_compensator
+            or args.force_position
+            or args.ois
+            or args.position_direction
+        ):
+            raise ValueError(
+                "solve and OIS setup arguments require --format zmx or both"
+            )
         prescription = (
             load_sectioned_csv(args.input, args.metadata)
             if args.input.suffix.casefold() == ".csv"
@@ -128,7 +167,16 @@ def main(argv: list[str] | None = None) -> int:
             outputs[csv_path] = render_prescription_csv(result.prescription)
         zmx_report = None
         if args.format in {"zmx", "both"}:
-            zmx_bytes, zmx_report = render_zmx(result, field_preset=args.field_preset)
+            zmx_bytes, zmx_report = render_zmx(
+                result,
+                field_preset=args.field_preset,
+                export_setup=ExportSetup(
+                    tuple(map(tuple, args.force_compensator)),
+                    tuple(map(tuple, args.force_position)),
+                    args.position_direction or "normal",
+                    tuple(map(tuple, args.ois)),
+                ),
+            )
             outputs[zmx_path] = zmx_bytes
         outputs[report_path] = merge_export_report(result, zmx_report)
         _write_outputs(outputs, args.overwrite)

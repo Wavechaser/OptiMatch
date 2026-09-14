@@ -1,0 +1,18 @@
+Lens Data
+Surface,Radius,Thickness,Material,nd,vd,nd offset,vd offset,Stop
+OBJ,0,d0,,,,,,
+1,40.000,2.50,S-BSL7,1.51680,64.1700,+0.000100,-0.0100,true
+2,-30.000,d2,,,,,,
+3,0,d3,,,,,,
+IMG,0,,,,,,,
+
+Even Aspheres
+Surface,k,A4,A6
+1,0,-1.2500E-05,2.500E-08
+
+Multiconfiguration Data
+,far,near
+aperture,4,4.2
+d0,infinity,1000
+d2,3.00,4.00
+d3,12.00,11.00

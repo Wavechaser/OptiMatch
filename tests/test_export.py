@@ -448,6 +448,9 @@ def test_rear_downstream_tole_relocates_across_invariant_coverglass():
         "surface_id": "2",
         "reference_surface_id": "1",
         "total": "5",
+        "totals": (),
+        "origin": "explicit",
+        "reverse": False,
     }
 
 

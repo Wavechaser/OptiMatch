@@ -16,10 +16,12 @@ SQLite/database storage are out of scope.
 - `optics_prescription_matcher.egg-info/`: generated editable-install metadata
   at the project root, ignored by Git.
 - `tests/`: pytest tests named `test_*.py`, organized by behavior as code grows.
-- `samples/`: original CSV/ZMX files and `SAMPLE_INSTRUCTIONS.md`;
+- `tests/fixtures/`: small synthetic, committed inputs for tests and quickstart;
+  never copies of private reference designs or full maintained catalogues.
+- `samples/`: local-only, ignored original CSV/ZMX files and `SAMPLE_INSTRUCTIONS.md`;
   preserve their names, encoding, and contents. The sample instructions are a
   historical workflow reference, not a complete executable specification.
-- `catalogs/`: maintained reference-catalogue CSV exports used for matching;
+- `catalogs/`: local-only, ignored maintained reference-catalogue CSV exports used for matching;
   preserve their row order and numeric strings, and keep source workbooks in
   `samples/` rather than treating XLSX as an application input.
 - `docs/`: project documentation, named in uppercase snake case. `FEATURES.md`

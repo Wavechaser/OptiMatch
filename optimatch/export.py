@@ -8,10 +8,17 @@ from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import TextIO
 
+from .export_setup import (
+    ExportSetup,
+    canonical_solves,
+    orient_solves,
+    prepare_solves,
+    solve_terms,
+)
 from .inputs import decimal_value
 from .matching import Match, MatchingResult, pgf_to_dpgf
 from .models import Asphere, Prescription, Surface, SystemSettings, Wavelength
-from .solves import ResolvedSolve, SolveResult, resolve_solves
+from .solves import ResolvedSolve, SolveResult, dependency_order
 
 
 def _write_csv(prescription: Prescription, stream: TextIO) -> None:
@@ -295,24 +302,20 @@ def _last_powered_rear_boundary(
 def _solve_terms(
     solve: ResolvedSolve, surfaces: tuple[Surface, ...]
 ) -> tuple[str, ...]:
-    ids = [surface.source_id for surface in surfaces]
-    start = ids.index(solve.reference_surface_id)
-    end = ids.index(solve.surface_id)
-    if solve.kind == "complementary_gap":
-        return (solve.reference_surface_id, solve.surface_id)
-    return tuple(ids[start : end + 1])
+    return solve_terms(solve, surfaces)
 
 
 def _evaluated_solve_values(
     source: SolveResult, surfaces: tuple[Surface, ...]
 ) -> tuple[dict[str, str], ...]:
     values = tuple(dict(item) for item in source.values)
-    order = {surface.source_id: index for index, surface in enumerate(surfaces)}
-    for solve in sorted(source.solves, key=lambda item: order[item.surface_id]):
+    for solve in dependency_order(
+        source.solves, [surface.source_id for surface in surfaces]
+    ):
         terms = _solve_terms(solve, surfaces)
-        for configuration in values:
+        for config_index, configuration in enumerate(values):
             configuration[solve.surface_id] = str(
-                Decimal(solve.total)
+                Decimal(solve.total_at(config_index))
                 - sum(
                     (
                         Decimal(configuration[item])
@@ -338,9 +341,14 @@ def _rear_dummy_export(
     source: SolveResult,
     aspheres: dict[str, Asphere],
     matches: dict[str, Match],
+    evaluated: tuple[dict[str, str], ...] | None = None,
 ) -> _ExportModel:
     surfaces = prescription.surfaces
-    values = _evaluated_solve_values(source, surfaces)
+    values = (
+        evaluated
+        if evaluated is not None
+        else _evaluated_solve_values(source, surfaces)
+    )
     rear = _last_powered_rear_boundary(surfaces, aspheres, matches)
     base = {
         "status": "not_inserted",
@@ -432,8 +440,13 @@ def _rear_dummy_export(
         config[rear] = str(gap - remainder)
         config[dummy] = str(remainder)
     total = Decimal(candidate.total) - excluded - remainder
-    transformed = ResolvedSolve(
-        candidate.kind, rear, candidate.reference_surface_id, str(total)
+    transformed = replace(
+        candidate,
+        surface_id=rear,
+        total=str(total),
+        totals=tuple(
+            str(Decimal(item) - excluded - remainder) for item in candidate.totals
+        ),
     )
     transformed_solves = tuple(
         transformed if solve == candidate else solve for solve in source.solves
@@ -581,17 +594,25 @@ def _validate_zmx(result: MatchingResult) -> tuple[dict[str, int], str]:
 
 
 def _asphere_lines(asphere: Asphere) -> list[str]:
-    maximum = max(asphere.coefficients, default=0)
-    if asphere.family == "even" and maximum <= 16 and asphere.normalization == "sag":
-        lines = ["  TYPE EVENASPH", f"  CONI {asphere.conic}"]
-        lines.extend(
-            f"  PARM {index} {asphere.coefficients.get(index * 2, '0')}"
-            for index in range(1, 9)
-        )
-        return lines
-    odd = asphere.family == "odd"
-    surface_type = "XOSPHERE" if odd else "XASPHERE"
+    nonzero = {
+        power for power, value in asphere.coefficients.items() if Decimal(value) != 0
+    }
+    maximum = max(nonzero, default=0)
+    odd = any(power % 2 for power in nonzero)
     r0 = Decimal(asphere.normalization_radius or "1")
+    if maximum <= (8 if odd else 16):
+        lines = [
+            f"  TYPE {'ODDASPHE' if odd else 'EVENASPH'}",
+            f"  CONI {asphere.conic}",
+        ]
+        for index in range(1, 9):
+            power = index if odd else index * 2
+            value = asphere.coefficients.get(power, "0")
+            if asphere.normalization == "normalized":
+                value = str(Decimal(value) / r0**power)
+            lines.append(f"  PARM {index} {value}")
+        return lines
+    surface_type = "XOSPHERE" if odd else "XASPHERE"
     count = maximum if odd else (maximum // 2)
     lines = [
         f"  TYPE {surface_type}",
@@ -610,19 +631,36 @@ def _asphere_lines(asphere: Asphere) -> list[str]:
 
 
 def render_zmx(
-    result: MatchingResult, *, field_preset: str | None = None
+    result: MatchingResult,
+    *,
+    field_preset: str | None = None,
+    export_setup: ExportSetup | None = None,
 ) -> tuple[bytes, dict[str, object]]:
     """Validate and render one narrowly supported sequential ZMX study model."""
     system, setup = _setup(result.prescription, field_preset)
     prescription = replace(result.prescription, system=system)
     source_ids, stop = _validate_zmx(replace(result, prescription=prescription))
-    solves = resolve_solves(prescription)
+    controls = export_setup or ExportSetup()
+    solves = prepare_solves(prescription, controls)
     aspheres = {item.surface_id: item for item in prescription.aspheres}
     matches = {item.surface_id: item for item in result.matches}
-    export = _rear_dummy_export(prescription, solves, aspheres, matches)
+    evaluated = _evaluated_solve_values(solves, prescription.surfaces)
+    canonical = replace(
+        solves, solves=canonical_solves(solves.solves, prescription.surfaces)
+    )
+    export = _rear_dummy_export(prescription, canonical, aspheres, matches, evaluated)
     surfaces = export.surfaces
     export_values = export.values
-    export_solves = export.solves
+    export_solves, direction_diagnostics = orient_solves(
+        export.solves, surfaces, controls.position_direction
+    )
+    if export.rear_dummy["status"] != "inserted" and any(
+        before.surface_id != after.surface_id
+        for before, after in zip(export.solves, export_solves, strict=True)
+    ):
+        # Keep the already accepted geometry when switching which thickness is
+        # dependent, including any source-precision-backed rounding adjustment.
+        export_values = evaluated
     ids = {surface.source_id: index for index, surface in enumerate(surfaces)}
     lines = [
         "VERS 221221 730 20120530 20120530",
@@ -757,6 +795,43 @@ def render_zmx(
                     )
                 apertures.append(aperture)
             sections.append(_mce_records("APER", 0, tuple(apertures), _MCE_TAIL))
+    solve_records = []
+    for solve in export_solves:
+        if solve.totals and _mce_values_vary(solve.totals):
+            solve_records.extend(
+                _mce_records("TSP2", ids[solve.surface_id], solve.totals, _MCE_TAIL)
+            )
+    if solve_records:
+        sections.append(solve_records)
+    ois_records = []
+    ois_report = []
+    for after, before in controls.ois:
+        # Every existing section receives a MOFF row. Each operand has count records.
+        pickup_row = (
+            sum(len(section) // count + 1 for section in sections)
+            + len(ois_records) // count
+            + 1
+        )
+        ois_records.extend(
+            _mce_records(
+                "CADY", ids[after], tuple("0" for _ in range(count)), _MCE_TAIL
+            )
+        )
+        for config_index in range(1, count + 1):
+            tail = f'{config_index + 1} 0 0 {config_index} {pickup_row} -1 0 0 "" 0'
+            ois_records.append(f"CBDY {ids[before]} {config_index} 0 {tail}")
+        ois_report.append(
+            dict(
+                after_surface_id=after,
+                before_surface_id=before,
+                after_export_surface=ids[after],
+                before_export_surface=ids[before],
+                cady_operand_row=pickup_row,
+                multiplier="-1",
+            )
+        )
+    if ois_records:
+        sections.append(ois_records)
     vignetting_records: list[str] = []
     for field_index, field in enumerate(system.fields, 1):
         if Decimal(field) == 0:
@@ -795,7 +870,9 @@ def render_zmx(
             "configuration_infinity_representation": "1e10",
             "solves": [asdict(item) for item in solves.solves],
             "export_solves": [asdict(item) for item in export_solves],
-            "solve_diagnostics": list(solves.diagnostics),
+            "solve_diagnostics": list(solves.diagnostics) + direction_diagnostics,
+            "export_setup": asdict(controls),
+            "ois": ois_report,
             "rear_dummy": export.rear_dummy,
         }
     }

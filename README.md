@@ -18,15 +18,14 @@ Skip venv creation if it already exists. Activation is unnecessary.
 
 ## Quickstart
 
-Match the supplied transcription to CSV:
+Run the small synthetic example (not a reference lens or production catalogue):
 
 ```powershell
-.\.venv\Scripts\python.exe -m optimatch samples/sample_lens_data.csv `
-  --catalog samples/combined_glass_catalog.csv --format csv --output output/study
+.\.venv\Scripts\python.exe -m optimatch tests/fixtures/study.csv `
+  --catalog tests/fixtures/catalog.csv --field-preset aps-c --output output/study
 ```
 
-For a complete prescription, omit `--format csv` to export both CSV and ZMX.
-Supply fields in the input or add a preset such as `--field-preset aps-c`.
+Keep your own inputs under ignored `samples/` and `catalogs/` directories.
 
 ## Documentation
 

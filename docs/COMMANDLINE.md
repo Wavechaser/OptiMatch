@@ -12,6 +12,10 @@ storage are out of scope. OCR can be added independently later.
 
 ## Current delivery note
 
+Forced constant/variable solves, normal/reversed position placement, paired OIS,
+and ordinary/extended nonzero-based asphere selection are implemented. Their
+complete controls and limits are described below under Forced solves and OIS.
+
 At the R3 matching-policy checkpoint, the executable accepts both the historical
 six-column catalogue and the revised nine-column catalogue described below. All
 six profiles, molding-aware selection, and partial-dispersion derivation are
@@ -48,6 +52,10 @@ python -m optimatch INPUT --catalog CSV --output PREFIX
     [--format {csv,zmx,both}]
     [--metadata JSON] [--overwrite]
     [--field-preset {1-type,m43,aps-c,full-frame,44x33,fisheye}]
+    [--force-compensator REFERENCE SOLVE] ...
+    [--force-position FIRST LAST] ...
+    [--position-direction {normal,reversed}]
+    [--ois AFTER BEFORE] ...
 ```
 
 | Argument | Meaning / default |
@@ -60,6 +68,10 @@ python -m optimatch INPUT --catalog CSV --output PREFIX
 | `--metadata JSON` | Optional metadata overlay for a CSV prescription only. Cannot replace CSV tables. |
 | `--field-preset 1-type\|m43\|aps-c\|full-frame\|44x33\|fisheye` | ZMX y-field preset. Overrides `system.field_preset`, not explicit compatible fields. `fisheye` uses angle fields; other presets use real image height. An explicit incompatible field type conflicts with a preset. Ignored for CSV-only output. No implicit format. |
 | `--overwrite` | Replace existing requested output files. Without it, existing outputs cause an error. Inputs remain protected. |
+| `--force-compensator REFERENCE SOLVE` | Repeatable; internal source surface IDs, reference before solve. Calculate their two thicknesses' sum per configuration. |
+| `--force-position FIRST LAST` | Repeatable; inclusive span of internal thickness surfaces in input order (a single surface is allowed). Calculate its sum per configuration. |
+| `--position-direction normal\|reversed` | Default normal: solve last. Reversed: solve first and reference the surface after LAST. A preference for inferred positions, mandatory for forced positions; explicit input placement is preserved unless overridden by forcing. |
+| `--ois AFTER BEFORE` | Repeatable; internal source IDs, BEFORE after AFTER. Zero-valued CADY with CBDY picking up the exact CADY MCE row in the same configuration, scale -1. Intervals including boundaries must be disjoint. |
 | `-h`, `--help` | Display usage and exit without reading inputs. |
 
 Exit status is `0` on success/help and `2` for command syntax, input, export or
@@ -73,7 +85,7 @@ Run the study-model workflow with a canonical JSON or sectioned CSV input:
 
 ```powershell
 .\.venv\Scripts\python.exe -m optimatch prescription.json `
-  --catalog samples/combined_glass_catalog.csv --profile default `
+  --catalog catalogs/REFERENCE_CATALOG.csv --profile default `
   --output output/study --format both
 ```
 
@@ -333,11 +345,79 @@ Format Python code with `.\.venv\Scripts\python.exe -m ruff format .`.
 There are no runtime dependencies; development tools are declared in
 `pyproject.toml`. Dependencies are not locked at this stage.
 
+## Forced solves and OIS
+
+These controls require `--format zmx` or `both`; they never rewrite source CSV
+tables. IDs always refer to the original input, before any dummy insertion.
+For example:
+
+```powershell
+.\.venv\Scripts\python.exe -m optimatch samples/prescription.json `
+  --catalog catalogs/REFERENCE_CATALOG.csv --output output/controlled `
+  --force-compensator 26 28 --force-position 11 32 `
+  --position-direction reversed --ois 6 12
+```
+
+`--force-position 11 32` covers d11 through d32. Normal placement solves on 32
+with reference 11; reversed placement solves on 11 with reference the next
+surface after 32, which may be IMG. It does not simply swap endpoints. The
+search remains forward-only, and the preference does nothing without an eligible
+position relationship. An unsafe inferred reversal falls back to normal with a
+diagnostic. Explicit input solves retain their direction by default.
+
+Forcing replaces an explicit solve on the same dependent or the identical
+thickness footprint, reporting the override. Conflicting forced constraints,
+duplicate dependents, and dependency cycles are errors. Remaining independent
+explicit relationships retain precedence over inference. A forced total needs
+numeric or explicitly derivable thicknesses in every configuration; missing
+input is not invented. Signed sums are retained without absolute-value conversion.
+Only varying totals receive TSP2 rows. Constant totals use the surface solve alone.
+
+Rear-dummy splitting occurs before final direction encoding. In reversed mode,
+the transformed span references the dummy and excludes its fixed remainder.
+The same source IDs used by OIS are remapped after insertion. CADY shifts after
+AFTER; CBDY restores coordinates before BEFORE. Both boundaries stay outside
+the moved interval. Every CBDY configuration picks up the actual final CADY
+operand row, not a surface number or a hardcoded sample row.
+
+MCE section order is LTTL, varying object THIC, varying internal independent
+THIC, optional APER, varying solve parameters, OIS pairs, and off-axis FVCY/FVDY.
+Empty sections are omitted; each remaining section ends with MOFF.
+Inspect `zmx.export_setup`, `export_solves`, `solve_diagnostics`, `ois`, and
+`rear_dummy` in the report for actual applied setup and source/export mappings.
+
+Python callers use the same setup object:
+
+```python
+from optimatch.export import render_zmx
+from optimatch.export_setup import ExportSetup
+
+content, report = render_zmx(
+    matching_result,
+    export_setup=ExportSetup(
+        force_positions=(("11", "32"),),
+        position_direction="reversed",
+        ois=(("6", "12"),),
+    ),
+)
+```
+
+Asphere output uses nonzero powers only to choose a family and capacity. Ordinary
+odd supports powers 1–8; ordinary even supports even powers 2–16. An odd-family
+row with only even nonzero coefficients exports as even. Zero odd-power padding
+is allowed in an even-family row, but nonzero odd coefficients are an input error
+there. Use an Odd Aspheres CSV section for mixed rows. Source tables and numeric
+strings are retained, including padding. Normalized coefficients are converted
+to physical sag coefficients when an ordinary type suffices.
+
 ## Layout and reference data
 
 - `optimatch/`: Python package (flat layout).
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
+- `tests/fixtures/`: committed synthetic quickstart/test inputs. The catalogue
+  is deliberately tiny and includes a fictitious TEST-PM entry; not a reference
+  catalogue or recommended optical design.
 - `catalogs/REFERENCE_CATALOG.csv`: maintained, executable reference-catalogue
   CSV export using the revised schema.
 - `samples/combined_glass_catalog.csv`: supplied catalogue snapshot.
@@ -347,6 +427,16 @@ There are no runtime dependencies; development tools are declared in
 - `samples/SAMPLE_INSTRUCTIONS.md`: historical agent instructions, qualified by the
   current scope and data rules in `AGENTS.md`.
 - `output/`: ignored generated files, created only when needed.
+
+`samples/` and `catalogs/` are ignored, local-only directories. The named private
+references above may exist in the maintainer's checkout but are not shipped.
+Normal pytest runs and README quickstart require neither directory. Historical
+Git revisions may still contain formerly tracked inputs; no history rewrite is
+performed. To audit your own catalogue on demand:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from optimatch.inputs import load_catalog_csv; print(len(load_catalog_csv('catalogs/REFERENCE_CATALOG.csv')))"
+```
 
 ## Documentation
 

@@ -204,7 +204,8 @@ def _asphere(data: Any, index: int) -> Asphere:
         if not isinstance(power_text, str) or not power_text.isdigit():
             raise _error(f"{context}.coefficients", f"invalid power {power_text!r}")
         power = int(power_text)
-        if power < 1 or (family == "even" and power % 2):
+        quantity = _quantity(value, f"{context}.coefficients.{power_text}")
+        if power < 1 or (family == "even" and power % 2 and Decimal(quantity) != 0):
             raise _error(
                 f"{context}.coefficients.{power_text}", "power is invalid for family"
             )
@@ -212,7 +213,7 @@ def _asphere(data: Any, index: int) -> Asphere:
             raise _error(
                 f"{context}.coefficients.{power_text}", "duplicate numeric power"
             )
-        parsed[power] = _quantity(value, f"{context}.coefficients.{power_text}")
+        parsed[power] = quantity
     normalization = data.get("normalization", "sag")
     if not isinstance(normalization, str) or normalization not in {
         "sag",
