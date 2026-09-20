@@ -52,5 +52,16 @@ perturbations. This evidence applies to those controls; arbitrary exports and
 other OpticStudio versions are not automatically host-validated. See
 [ZMX_SYNTAX.md](ZMX_SYNTAX.md) for the supported records and evidence.
 
-Release archive inspection and isolated package-installation checks are pending.
-No publication date or published-package availability is claimed yet.
+Package checks on Windows with Python 3.13.14 passed on 2026-09-20: wheel and
+source-archive contents inspected, metadata checked, and each artifact installed
+in a separate fresh environment. Both installations run the bundled example,
+produce CSV/UTF-16 ZMX/JSON outputs and protect existing outputs. All 240 tests
+pass against the installed wheel and in the checkout; Ruff and dependency checks
+pass. Private-input hashes are unchanged. Other Python versions and operating
+systems were not tested in this release check.
+
+The default Windows temporary-directory and pip-cache paths encountered access
+restrictions; verification used a task-owned pytest directory and disabled pip
+caching for the source installation. No application change was needed.
+
+The artifacts are prepared for review; no tag, push or publication has occurred.

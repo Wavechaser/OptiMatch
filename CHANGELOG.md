@@ -26,8 +26,11 @@ study-glass matching, and CSV/ZMX export. The distribution is
   remain ignored and are not release inputs.
 - Archive the completed implementation plan under `docs/obsolete/`, retaining
   its engineering decisions and verification history for reference.
-- Prepare wheel/source-archive inclusion rules. Archive inspection and isolated
-  installation verification are pending; no release has been published.
+- Verify wheel/source-archive contents and metadata, excluding private inputs;
+  preserve private-input hashes. Fresh wheel and source-archive installations
+  run the packaged example and reject accidental output replacement. All 240
+  tests pass against the installed wheel and in the checkout; lint, formatting
+  and dependency checks pass. No release has been published.
 
 ### Export controls and source-data isolation
 
