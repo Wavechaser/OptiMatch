@@ -8,9 +8,9 @@ from importlib.metadata import distribution
 
 def test_installed_package():
     package = import_module("optimatch")
-    metadata = distribution("optics-prescription-matcher").metadata
+    metadata = distribution("optimatch").metadata
     assert package.__name__ == "optimatch"
-    assert metadata["Name"] == "optics-prescription-matcher"
+    assert metadata["Name"] == "optimatch"
 
 
 def test_installed_cli_outside_checkout(tmp_path):

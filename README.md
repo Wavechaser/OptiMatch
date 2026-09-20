@@ -9,7 +9,7 @@ lenses or optical performance.
 
 OptiMatch requires **Python 3.13 or newer** and has no third-party runtime
 dependencies. It is distributed as a Python package, not a Windows executable.
-The distribution name is `optics-prescription-matcher`; run it as
+The distribution name is `optimatch`; run it as
 `python -m optimatch`.
 
 For the prepared 0.1.0 release, install the wheel supplied with the release
@@ -20,14 +20,14 @@ wheel path with your downloaded file's absolute path:
 New-Item -ItemType Directory optimatch-study
 Set-Location optimatch-study
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install "C:\Downloads\optics_prescription_matcher-0.1.0-py3-none-any.whl"
+.\.venv\Scripts\python.exe -m pip install "C:\Downloads\optimatch-0.1.0-py3-none-any.whl"
 .\.venv\Scripts\python.exe -m optimatch --help
 ```
 
 Use an installed newer Python version in place of `-3.13` if needed. Environment
 activation is unnecessary. This release preparation does not imply a PyPI
 publication. You can also install the source archive with
-`python -m pip install PATH\optics_prescription_matcher-0.1.0.tar.gz` using your
+`python -m pip install PATH\optimatch-0.1.0.tar.gz` using your
 environment's Python; pip must obtain the build requirements.
 
 For development from a repository checkout, see the

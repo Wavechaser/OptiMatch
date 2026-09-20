@@ -9,7 +9,7 @@ or validation of a lens's optical performance.
 
 ### Installation and first run
 
-The Python distribution is `optics-prescription-matcher`; run it with
+The Python distribution is `optimatch`; run it with
 `python -m optimatch`. Python 3.13 or newer is required, with no third-party
 runtime dependencies. This release targets a wheel and source archive, not a
 standalone executable. See the [README](../README.md) for installation and the

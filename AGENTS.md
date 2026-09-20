@@ -12,10 +12,10 @@ SQLite/database storage are out of scope.
 ## Structure
 
 - `optimatch/`: importable Python code and `python -m optimatch` CLI;
-  snake_case modules. The project/distribution remains `optics-prescription-matcher`.
+  snake_case modules. The distribution, import package and module CLI are named `optimatch`.
 - `optimatch/examples/`: packaged synthetic `study.csv` and `catalog.csv` for
   installed-user quickstart; no private prescriptions or maintained catalogues.
-- `optics_prescription_matcher.egg-info/`: generated editable-install metadata
+- `optimatch.egg-info/`: generated editable-install metadata
   at the project root, ignored by Git.
 - `tests/`: pytest tests named `test_*.py`, organized by behavior as code grows.
 - `tests/fixtures/`: small synthetic, committed inputs for tests and quickstart;

@@ -366,8 +366,7 @@ undeclared symbols, and misplaced nonfinite values are rejected with location.
 
 ## Development (Windows / PowerShell)
 
-The import package and module CLI are now `optimatch`; the project/distribution
-name remains `optics-prescription-matcher`. Existing checkouts should rerun the
+The distribution, import package and module CLI are all named `optimatch`. Existing checkouts should rerun the
 editable install below after updating. The former package name is not an alias.
 
 Python 3.13 or newer is required. From the repository root:
@@ -488,7 +487,7 @@ to physical sag coefficients when an ordinary type suffices.
 
 - `optimatch/`: Python package (flat layout).
 - `optimatch/examples/`: packaged synthetic lens and small catalogue for installed users.
-- `optics_prescription_matcher.egg-info/`: ignored installation metadata.
+- `optimatch.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
 - `tests/fixtures/`: committed synthetic quickstart/test inputs. The catalogue
   is deliberately tiny and includes a fictitious TEST-PM entry; not a reference

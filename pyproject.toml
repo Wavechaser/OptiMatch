@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "optics-prescription-matcher"
+name = "optimatch"
 version = "0.1.0"
 description = "Optical prescription matching and study-model export tools"
 readme = "README.md"

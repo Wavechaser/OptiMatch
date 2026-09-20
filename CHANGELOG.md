@@ -13,12 +13,14 @@ historical deliveries. User-facing release summaries live in
 
 The first Python package release provides prescription input, deterministic
 study-glass matching, and CSV/ZMX export. The distribution is
-`optics-prescription-matcher`; its import and module command are `optimatch`.
+`optimatch`, matching its import and module command.
 
 ### Release preparation
 
 #### Prepare Python package documentation and examples (2026-09-20)
 
+- Rename the release distribution to `optimatch`, aligning wheel/source archive
+  names and installation metadata with the existing import package and CLI.
 - Document installation, expected prescription CSV sections, explicit catalogue
   selection, and the installed-user quickstart.
 - Add this retrospective changelog and pending-release notes. Package a synthetic
