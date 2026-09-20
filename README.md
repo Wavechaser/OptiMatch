@@ -12,8 +12,8 @@ dependencies. It is distributed as a Python package, not a Windows executable.
 The distribution name is `optimatch`; run it as
 `python -m optimatch`.
 
-For the prepared 0.1.0 release, install the wheel supplied with the release
-artifacts. These PowerShell commands use a new working directory; replace the
+For version 0.1.0, install the wheel from the
+[GitHub release](https://github.com/Wavechaser/OptiMatch/releases/tag/v0.1.0). These PowerShell commands use a new working directory; replace the
 wheel path with your downloaded file's absolute path:
 
 ```powershell
@@ -25,8 +25,7 @@ py -3.13 -m venv .venv
 ```
 
 Use an installed newer Python version in place of `-3.13` if needed. Environment
-activation is unnecessary. This release preparation does not imply a PyPI
-publication. You can also install the source archive with
+activation is unnecessary. This release is distributed through GitHub, not PyPI. You can also install the source archive with
 `python -m pip install PATH\optimatch-0.1.0.tar.gz` using your
 environment's Python; pip must obtain the build requirements.
 

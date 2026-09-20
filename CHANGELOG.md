@@ -9,7 +9,7 @@ publication. Retrospective entries summarize the Git history and
 historical deliveries. User-facing release summaries live in
 [RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
-## v0.1.0 (unreleased)
+## v0.1.0 (2026-09-20)
 
 The first Python package release provides prescription input, deterministic
 study-glass matching, and CSV/ZMX export. The distribution is
@@ -32,7 +32,7 @@ study-glass matching, and CSV/ZMX export. The distribution is
   preserve private-input hashes. Fresh wheel and source-archive installations
   run the packaged example and reject accidental output replacement. All 240
   tests pass against the installed wheel and in the checkout; lint, formatting
-  and dependency checks pass. No release has been published.
+  and dependency checks pass. Publish the wheel and source archive on GitHub.
 
 ### Export controls and source-data isolation
 

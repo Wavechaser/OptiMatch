@@ -1,6 +1,6 @@
 # Release notes
 
-## v0.1.0 — pending release
+## v0.1.0 — 2026-09-20
 
 OptiMatch turns a supplied optical prescription and a reference-catalogue CSV
 into a study prescription, a matching report, and optionally an OpticStudio ZMX
@@ -64,4 +64,5 @@ The default Windows temporary-directory and pip-cache paths encountered access
 restrictions; verification used a task-owned pytest directory and disabled pip
 caching for the source installation. No application change was needed.
 
-The artifacts are prepared for review; no tag, push or publication has occurred.
+Release assets are available from the [v0.1.0 GitHub release](https://github.com/Wavechaser/OptiMatch/releases/tag/v0.1.0).
+This release is distributed through GitHub; it is not published to PyPI.
