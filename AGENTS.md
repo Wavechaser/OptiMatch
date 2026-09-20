@@ -13,6 +13,8 @@ SQLite/database storage are out of scope.
 
 - `optimatch/`: importable Python code and `python -m optimatch` CLI;
   snake_case modules. The project/distribution remains `optics-prescription-matcher`.
+- `optimatch/examples/`: packaged synthetic `study.csv` and `catalog.csv` for
+  installed-user quickstart; no private prescriptions or maintained catalogues.
 - `optics_prescription_matcher.egg-info/`: generated editable-install metadata
   at the project root, ignored by Git.
 - `tests/`: pytest tests named `test_*.py`, organized by behavior as code grows.
@@ -25,12 +27,20 @@ SQLite/database storage are out of scope.
   preserve their row order and numeric strings, and keep source workbooks in
   `samples/` rather than treating XLSX as an application input.
 - `docs/`: project documentation, named in uppercase snake case. `FEATURES.md`
-  describes desired behavior; `IMPLEMENTATION_PLAN.md` defines engineering
-  decisions and checkpoint status; `ZMX_SYNTAX.md` records known serialization
+  describes desired behavior; `obsolete/IMPLEMENTATION_PLAN.md` preserves historical engineering
+  decisions and completed checkpoints; `ZMX_SYNTAX.md` records known serialization
   details with evidence and uncertainty. `COMMANDLINE.md` owns the complete CLI
   reference, input examples and development commands. Keep these roles distinct
-  and update each with the behavior it governs. README contains only a brief
-  project description, minimal setup/quickstart and documentation links.
+  and update each with the behavior it governs. `RELEASE_NOTES.md` summarizes
+  the pending or published release and its limitations. README owns installation,
+  quickstart and an input/catalogue overview, linking to the complete CLI reference.
+- `docs/obsolete/`: superseded planning records retained for historical evidence; preserve filenames and repair links when archiving. Current behavior belongs in the active documentation.
+- `CHANGELOG.md`: newest-first milestone, phase and dated task history, following
+  the neighboring NamiSync format; unreleased work is explicitly labeled.
+- `MANIFEST.in`: source-archive inclusion rules; package data is declared in
+  `pyproject.toml`. `build/` and `dist/` are ignored packaging artifacts.
+- Temporary release environments, extracted archives and verification evidence
+  belong under ignored `output/`; remove only task-owned temporary artifacts.
 - `.github/workflows/`: lightweight automated checks only.
 - `output/`: ignored generated prescriptions and diagnostic artifacts. Remove
   only your own temporary artifacts; never clean user inputs automatically.

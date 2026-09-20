@@ -4,8 +4,8 @@ Status: validated JSON/CSV inputs, deterministic glass matching, CSV/ZMX output,
 the revised catalogue, all manufacturer profiles, molding-aware selection,
 partial-dispersion derivation, and model-glass fallback are implemented. OCR
 remains planned.
-Engineering decisions and delivery checkpoints belong in
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); known ZMX records and their
+Historical engineering decisions and completed delivery checkpoints are archived in
+[IMPLEMENTATION_PLAN.md](obsolete/IMPLEMENTATION_PLAN.md); known ZMX records and their
 evidence belong in [ZMX_SYNTAX.md](ZMX_SYNTAX.md).
 
 ## Purpose

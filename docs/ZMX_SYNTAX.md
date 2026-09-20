@@ -208,7 +208,7 @@ Setting Position with FromSurface=11 and Length=10.58 on surface 14 saved
 files were not saved over; the modified model is local `output/position.zmx`.
 
 Inference eligibility and handling of rounded sums belong in
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Never put an independently
+[IMPLEMENTATION_PLAN.md](obsolete/IMPLEMENTATION_PLAN.md). Never put an independently
 driven `THIC` value and a thickness solve on the same dependent surface.
 
 ## Variable solve and OIS MCE records (2026-09-14)

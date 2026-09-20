@@ -1,11 +1,15 @@
 # Glass matcher and ZMX exporter: implementation proposal
 
+Archived 2026-09-20 after the recorded deliveries were completed. This file is
+historical planning and verification evidence; use [COMMANDLINE.md](../COMMANDLINE.md)
+for current behavior and [CHANGELOG.md](../../CHANGELOG.md) for delivery history.
+
 Status: C1, C2, and C3 implemented and independently reviewed, 2026-09-10.
 The R0–R3 catalogue and matching-policy delivery is complete, 2026-09-11.
 The F1–F4 export-refinement delivery is complete and host-verified, 2026-09-11.
 This plan applies the plan-work structure with small implementation commits.
-Product requirements live in [FEATURES.md](FEATURES.md); file-format evidence
-lives in [ZMX_SYNTAX.md](ZMX_SYNTAX.md). Proposed policies below are explicit
+Product requirements live in [FEATURES.md](../FEATURES.md); file-format evidence
+lives in [ZMX_SYNTAX.md](../ZMX_SYNTAX.md). Proposed policies below are explicit
 engineering choices, not claims that the historical examples uniquely imply them.
 
 ## Main objectives

@@ -1,0 +1,10 @@
+include AGENTS.md CHANGELOG.md LICENSE README.md pyproject.toml
+recursive-include docs *.md
+recursive-include optimatch *.py *.csv
+recursive-include tests *.py *.csv
+prune samples
+prune catalogs
+prune output
+prune build
+prune dist
+global-exclude __pycache__ *.py[cod]

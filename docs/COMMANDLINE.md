@@ -1,8 +1,10 @@
 # Command-line reference
 
-Run all commands from the repository root using native PowerShell. Quote paths
-containing spaces. Results are study substitutes, not representations of
-production samples.
+Examples use native PowerShell and a local `.venv`. Installed users can run
+OptiMatch from any working directory; relative paths use that directory.
+Development commands assume the repository root. Quote paths containing spaces.
+See [installation and packaged quickstart](../README.md) to start without a
+checkout. Results are study substitutes, not representations of production samples.
 
 The repository contains validated JSON/CSV input records, deterministic glass
 matching, a machine-readable decision report, and sectioned CSV/ZMX output. OCR
@@ -38,8 +40,7 @@ falls back to ordinary matching. This is a bounded preference, not an exclusion
 of polymers, crystals, or ordinary glass.
 
 The CLI accepts `default`, `canon`, `nikon`, `sony`, `sigma`, and
-`fujifilm`. Their precise preference orders and exclusions are recorded in
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Profiles are selected only by
+`fujifilm`. Their preference orders and exclusions are listed below. Profiles are selected only by
 `--profile`, never inferred from a filename. e-line ne/ve matching is deferred.
 
 ## Match a prescription
@@ -61,7 +62,7 @@ python -m optimatch INPUT --catalog CSV --output PREFIX
 | Argument | Meaning / default |
 | --- | --- |
 | `INPUT` | Required prescription path. A `.csv` suffix (case-insensitive) selects the sectioned CSV adapter; otherwise the file is read as canonical JSON. Not a PDF, image, ZMX, or workbook reader. |
-| `--catalog CSV` | Required glass catalogue CSV export. |
+| `--catalog CSV` | Required path to one glass catalogue CSV export. No folder search, automatic catalogue loading, merging or downloads. |
 | `--output PREFIX` | Required output prefix; `.csv`, `.zmx`, and `.report.json` suffixes are appended, not substituted. Parent directories are created. |
 | `--profile default\|canon\|nikon\|sony\|sigma\|fujifilm` | Glass preference profile; default `default`. |
 | `--format csv\|zmx\|both` | Requested prescription outputs; default `both`. Every successful invocation also writes the JSON report. |
@@ -198,6 +199,13 @@ warning.
 
 ## Prescription inputs
 
+Both prescription CSV and catalogue CSV must be UTF-8 (an optional BOM is
+accepted). They have different structures: prescriptions contain named sections;
+catalogues contain one header row followed by glass rows. Decimal values use a
+point, and source numeric strings retain their precision.
+
+### Catalogue CSV
+
 Catalogue input is UTF-8 CSV, optionally with a BOM. Required headers are
 `Manufacturer`, `Typecode`, `nd`, `vd`, `PgF`, and `dPgF`; the historical
 `P_g,F` and `d_Pg,F` spellings remain accepted aliases. Optional headers are
@@ -219,7 +227,47 @@ Manufacturer,Typecode,nd,vd,ne,ve,PgF,dPgF,PrecisionMolding
 Ohara,S-BSL7,1.51633,64.1428,1.51825,63.9307,0.535322,-0.0024,
 ```
 
-Example using the supplied transcription without requiring complete ZMX setup:
+### Sectioned prescription CSV
+
+Start with `Lens Data` and a header containing `Surface`, `Radius`, `Thickness`,
+`Material`, `nd`, and `vd`. Each surface row describes the medium and thickness
+after that surface. Leave `Material` blank and supply `nd` and `vd` together to
+request a match; an explicit material typecode remains authoritative. Blank
+material and optical values mean air, not unknown glass. Optional columns include
+`PgF`, `dPgF`, `nd offset`, `vd offset`, and `Stop` (`true`, `false`, or blank).
+CSV units default to millimetres; a metadata overlay may supply other units.
+
+The packaged synthetic `optimatch/examples/study.csv` has this section layout:
+
+```csv
+Lens Data
+Surface,Radius,Thickness,Material,nd,vd,nd offset,vd offset,Stop
+OBJ,0,d0,,,,,,
+1,40.000,2.50,S-BSL7,1.51680,64.1700,+0.000100,-0.0100,true
+2,-30.000,d2,,,,,,
+3,0,d3,,,,,,
+IMG,0,,,,,,,
+
+Even Aspheres
+Surface,k,A4,A6
+1,0,-1.2500E-05,2.500E-08
+
+Multiconfiguration Data
+,far,near
+aperture,4,4.2
+d0,infinity,1000
+d2,3.00,4.00
+d3,12.00,11.00
+```
+
+Asphere rows identify a lens surface, conic `k`, and coefficients by power
+(`A4`, `A6`, etc.). Configuration headers name each configuration; each subsequent
+row supplies a quantity for every configuration. Thickness symbols in the lens
+table are declared automatically. Infinity is valid for object distance, not
+internal distances. See [Forced solves and OIS](#forced-solves-and-ois) for
+asphere-family limits and optional solve controls.
+
+Example using a user transcription without requiring complete ZMX setup:
 
 ```powershell
 .\.venv\Scripts\python.exe -m optimatch samples/sample_lens_data.csv `
@@ -345,6 +393,32 @@ Format Python code with `.\.venv\Scripts\python.exe -m ruff format .`.
 There are no runtime dependencies; development tools are declared in
 `pyproject.toml`. Dependencies are not locked at this stage.
 
+### Build and verify release packages
+
+Install the declared release tools and build the wheel and source archive:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,release]"
+.\.venv\Scripts\python.exe -m build
+.\.venv\Scripts\python.exe -m twine check dist/*
+```
+
+`dist/` contains release artifacts and `build/` contains intermediate build data;
+both are ignored. `MANIFEST.in` controls source-archive contents, while
+`pyproject.toml` declares the packaged synthetic CSV files. A successful build or
+metadata check alone does not establish that an artifact is ready to release.
+
+Before publishing, inspect both archives for the intended code, license and
+synthetic examples; the source archive also includes documentation, tests and
+fixtures. Reject archives containing private `samples/` or `catalogs/`, virtual
+environments, caches or generated outputs. Install the wheel in a new temporary
+venv under ignored `output/` and run `--help` and the README quickstart from a
+working directory outside the source checkout. Inspect all three outputs, then
+rebuild the extracted source archive and smoke-test its resulting wheel in a
+separate clean environment. Remove only task-owned temporary environments and
+extractions after verification; retain useful release evidence under `output/`.
+Building and verifying do not publish, tag or push a release.
+
 ## Forced solves and OIS
 
 These controls require `--format zmx` or `both`; they never rewrite source CSV
@@ -413,6 +487,7 @@ to physical sag coefficients when an ordinary type suffices.
 ## Layout and reference data
 
 - `optimatch/`: Python package (flat layout).
+- `optimatch/examples/`: packaged synthetic lens and small catalogue for installed users.
 - `optics_prescription_matcher.egg-info/`: ignored installation metadata.
 - `tests/`: input, CSV, matching, ZMX, solve, CLI, and installation tests.
 - `tests/fixtures/`: committed synthetic quickstart/test inputs. The catalogue
@@ -427,6 +502,7 @@ to physical sag coefficients when an ordinary type suffices.
 - `samples/SAMPLE_INSTRUCTIONS.md`: historical agent instructions, qualified by the
   current scope and data rules in `AGENTS.md`.
 - `output/`: ignored generated files, created only when needed.
+- `build/`, `dist/`: ignored intermediate packaging data and release archives.
 
 `samples/` and `catalogs/` are ignored, local-only directories. The named private
 references above may exist in the maintainer's checkout but are not shipped.
@@ -440,9 +516,12 @@ performed. To audit your own catalogue on demand:
 
 ## Documentation
 
+- [Installation and quickstart](../README.md): installed-user workflow and input overview.
+- [Release notes](RELEASE_NOTES.md): release scope and limitations.
+- [Changelog](../CHANGELOG.md): retrospective milestones and unreleased work.
 - [Features](FEATURES.md): desired capabilities, independent of implementation.
-- [Implementation proposal](IMPLEMENTATION_PLAN.md): data contracts, matching
-  policy, exporter design, and completed implementation checkpoints.
+- [Historical implementation record](obsolete/IMPLEMENTATION_PLAN.md): completed
+  checkpoints, earlier design decisions and delivery evidence.
 - [ZMX syntax](ZMX_SYNTAX.md): observed records, sources, and unresolved details.
 
 See [AGENTS.md](../AGENTS.md) for development and optical-data conventions. Git attributes

@@ -13,6 +13,13 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.11"]
+release = ["build>=1.2", "twine>=6"]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.package-data]
+optimatch = ["examples/*.csv"]
 
 [tool.setuptools.packages.find]
 where = ["."]
